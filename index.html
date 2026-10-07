@@ -1,0 +1,1250 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Дневник">
+<meta name="theme-color" content="#F1F3F5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#12161B" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<script src="web-bridge.js"></script>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; manifest-src 'self'; worker-src 'self'">
+<title>Дневник самонаблюдения</title>
+<link rel="stylesheet" href="fonts/onest/400.css">
+<link rel="stylesheet" href="fonts/onest/500.css">
+<link rel="stylesheet" href="fonts/onest/600.css">
+<link rel="stylesheet" href="fonts/literata/500.css">
+<link rel="stylesheet" href="fonts/literata/600.css">
+<style>
+/* Layout: one calm column (max 860px); tabs on top at desktop, bottom bar on phone; the 1–10 mood scale is the visual spine — cool slate for the depressive side, amber for the manic side. */
+:root{
+  --bg:#F1F3F5; --surface:#FFFFFF; --sunk:#E8ECEF;
+  --ink:#1C232D; --ink-2:#465061; --muted:#6A7383; --line:#D9DEE4;
+  --accent:#2D5E63; --accent-soft:#DDEBEA;
+  --dep:#4A6BA8; --mid:#9AA7A8; --man:#C58517;
+  --warn:#AE3737; --warn-soft:#F7E6E5; --caution:#9A6A12; --caution-soft:#F6EDDA; --ok:#357A4C;
+  --display:"Literata",Georgia,"Times New Roman",serif;
+  --body:"Onest",-apple-system,"Segoe UI",Roboto,sans-serif;
+  --tabbar-h:0px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#12161B; --surface:#1A1F26; --sunk:#222831;
+  --ink:#E5E9EF; --ink-2:#B7BFCB; --muted:#8B94A2; --line:#2D343E;
+  --accent:#86BFC3; --accent-soft:#1E3335;
+  --dep:#8DA8DD; --mid:#7D8A8C; --man:#E2B157;
+  --warn:#EE8C86; --warn-soft:#3A2325; --caution:#E2B157; --caution-soft:#352B1A; --ok:#7FC596;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12161B; --surface:#1A1F26; --sunk:#222831;
+  --ink:#E5E9EF; --ink-2:#B7BFCB; --muted:#8B94A2; --line:#2D343E;
+  --accent:#86BFC3; --accent-soft:#1E3335;
+  --dep:#8DA8DD; --mid:#7D8A8C; --man:#E2B157;
+  --warn:#EE8C86; --warn-soft:#3A2325; --caution:#E2B157; --caution-soft:#352B1A; --ok:#7FC596;
+  color-scheme:dark}
+
+*{box-sizing:border-box}
+html,body{background:var(--bg)}
+body{color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.55;padding-inline:16px;padding-block:0 calc(var(--tabbar-h) + 24px)}
+.wrap{max-width:860px;margin:0 auto}
+h1,h2,h3{font-family:var(--display);font-weight:500;text-wrap:balance;margin:0}
+h2{font-size:1.5rem;line-height:1.2}
+h3{font-size:1.08rem;line-height:1.3}
+p{margin:0}
+button,input,textarea,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
+
+/* header */
+header.top{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding-block:20px 12px}
+.brand{display:flex;flex-direction:column;gap:2px;margin-right:auto;min-width:0}
+.brand h1{font-size:1.35rem}
+.store-status{font-size:.8rem;color:var(--muted)}
+.store-status.local{color:var(--caution)}
+.help-btn{border:1px solid var(--warn);background:var(--warn-soft);color:var(--warn);border-radius:999px;padding:7px 14px;font-weight:600;font-size:.85rem;cursor:pointer}
+
+nav.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:22px}
+nav.tabs button{background:none;border:0;border-bottom:2px solid transparent;padding:10px 12px;color:var(--ink-2);cursor:pointer;font-weight:500;margin-bottom:-1px}
+nav.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+@media (max-width:640px){
+  :root{--tabbar-h:62px}
+  nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:30;margin:0;background:var(--surface);border-top:1px solid var(--line);border-bottom:0;padding:4px 4px calc(4px + env(safe-area-inset-bottom,0px));justify-content:space-around}
+  nav.tabs button{flex:1;padding:10px 2px;font-size:.78rem;border-bottom:0;border-top:2px solid transparent;margin:0}
+  nav.tabs button[aria-selected="true"]{border-top-color:var(--accent)}
+  nav.tabs button{font-size:.72rem;padding:10px 0}
+  input[type=time],input[type=number],input[type=text],input[type=tel],input[type=date],textarea{font-size:16px}
+  header.top{padding-top:calc(12px + env(safe-area-inset-top,0px))}
+}
+
+/* generic */
+.view{display:flex;flex-direction:column;gap:22px}
+.lede{color:var(--ink-2);max-width:62ch}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 14px;cursor:pointer;font-weight:500}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+.btn.primary:disabled{opacity:.5;cursor:default}
+.btn.ghost{background:none}
+.btn.small{padding:5px 10px;font-size:.85rem}
+.label{font-size:.74rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.hint{font-size:.83rem;color:var(--muted)}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px}
+.block{display:flex;flex-direction:column;gap:14px;padding-block:18px;border-top:1px solid var(--line)}
+.block:first-of-type{border-top:0;padding-top:0}
+.block-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.field > .fl{font-weight:500;font-size:.92rem}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px}
+
+input[type=time],input[type=number],input[type=text],input[type=tel],textarea,input[type=date]{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%;min-width:0}
+textarea{resize:vertical;min-height:64px}
+
+/* scales */
+.scale{display:grid;grid-template-columns:repeat(var(--n,10),minmax(0,1fr));gap:4px;max-width:520px}
+.sv{position:relative;border:1px solid var(--line);background:var(--bg);border-radius:6px;padding:9px 0 7px;cursor:pointer;font-weight:600;font-variant-numeric:tabular-nums;overflow:hidden}
+.sv::before{content:"";position:absolute;left:0;right:0;top:0;height:4px;background:var(--c,var(--accent-soft))}
+.sv[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.scale-ends{display:flex;justify-content:space-between;max-width:520px;font-size:.76rem;color:var(--muted)}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button,.chip{border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:6px 12px;cursor:pointer;font-size:.88rem}
+.seg button[aria-pressed="true"],.chip[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--ink);font-weight:500}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.meds{display:flex;flex-direction:column;gap:8px}
+.med{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);cursor:pointer}
+.med input{width:18px;height:18px;accent-color:var(--accent)}
+.derived{font-size:.88rem;color:var(--ink-2)}
+.derived strong{font-weight:600;color:var(--ink)}
+
+/* day nav */
+.daynav{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.daynav h2{margin-right:auto;min-width:0}
+.iconbtn{border:1px solid var(--line);background:var(--surface);border-radius:8px;width:36px;height:36px;cursor:pointer;font-size:1rem}
+.iconbtn:disabled{opacity:.35;cursor:default}
+
+.savebar{position:sticky;bottom:calc(var(--tabbar-h) + 12px);z-index:10;display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px;box-shadow:0 6px 24px rgba(0,0,0,.08)}
+.savebar .msg{font-size:.85rem;color:var(--muted);margin-right:auto}
+.savebar .msg.dirty{color:var(--caution)}
+
+/* alerts */
+.alerts{display:flex;flex-direction:column;gap:8px}
+.alert{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--surface)}
+.alert .sev{grid-row:span 2;width:8px;border-radius:4px;background:var(--mid)}
+.alert .t{font-weight:600}
+.alert .d{font-size:.88rem;color:var(--ink-2)}
+.alert.urgent{background:var(--warn-soft);border-color:var(--warn)}
+.alert.urgent .sev{background:var(--warn)}
+.alert.doctor{background:var(--caution-soft);border-color:color-mix(in oklab,var(--caution) 40%,var(--line))}
+.alert.doctor .sev{background:var(--caution)}
+.urgent-box{padding:14px 16px;border-radius:10px;background:var(--warn-soft);border:1px solid var(--warn);color:var(--ink)}
+.urgent-box strong{color:var(--warn)}
+.big-num{font-family:var(--display);font-size:2rem;color:var(--warn);font-variant-numeric:tabular-nums;letter-spacing:.02em}
+
+/* day strip & calendar */
+.daystrip{display:grid;grid-template-columns:repeat(14,minmax(0,1fr));gap:4px;overflow-x:auto}
+.dchip{display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 0 5px;border:1px solid transparent;border-radius:8px;background:none;cursor:pointer;min-width:34px}
+.dchip:hover{border-color:var(--line)}
+.dchip .wd{font-size:.7rem;color:var(--muted)}
+.dchip .dn{width:28px;height:28px;border-radius:7px;display:grid;place-items:center;font-weight:600;font-size:.85rem;border:1px dashed var(--line)}
+.dchip .dn[style*="color-mix"],.dchip .dn[style*="accent-soft"]{border-style:solid}
+.dchip.today .wd{color:var(--accent);font-weight:600}
+.dchip.sel{border-color:var(--ink);background:var(--surface)}
+.marks{display:flex;gap:2px;min-height:6px;justify-content:center;flex-wrap:wrap}
+.mk{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--mid)}
+.legend .mk{width:8px;height:8px;margin-right:6px;vertical-align:middle;border-radius:50%}
+.legend .mk.imp{border-radius:1px}
+.mk.short{background:var(--man)}.mk.long{background:var(--dep)}
+.mk.miss{background:none;border:1.5px solid var(--warn);width:7px;height:7px}
+.mk.imp{background:var(--caution);border-radius:1px;transform:rotate(45deg)}
+.mk.sign{background:var(--accent)}
+.mk.harm{background:var(--warn)}
+.cal-layout{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:760px){.cal-layout{grid-template-columns:1fr}}
+.calgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}
+.cwd{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:center;padding-bottom:2px}
+.cday{position:relative;aspect-ratio:1/0.9;min-height:46px;border:1px solid var(--line);border-radius:8px;background:var(--bg);cursor:pointer;display:flex;flex-direction:column;justify-content:space-between;align-items:stretch;padding:4px 5px;text-align:left}
+.cday.blank{border:0;background:none;cursor:default}
+.cday:disabled{opacity:.35;cursor:default}
+.cday:not(:disabled):hover{border-color:var(--accent)}
+.cday .cd{font-size:.72rem;color:var(--ink-2)}
+.cday .cm{font-size:1.05rem;font-weight:600;text-align:center;line-height:1}
+.cday .marks{justify-content:flex-start}
+.cday.today{box-shadow:inset 0 0 0 2px var(--accent)}
+.cday.sel{border-color:var(--ink);box-shadow:0 0 0 2px var(--ink)}
+.cal-side .kv{display:grid;grid-template-columns:auto 1fr;gap:5px 12px;margin:0;font-size:.9rem}
+.cal-side dt{color:var(--muted)}
+.cal-side dd{margin:0;min-width:0;overflow-wrap:anywhere}
+
+.steps{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:6px;color:var(--ink-2)}
+.steps strong{color:var(--ink)}
+
+/* levels & triggers */
+.lvl{display:flex;flex-direction:column;gap:6px;padding-bottom:6px}
+.lvl-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.lvl-name{font-weight:500}
+.lvl-track{position:relative;height:12px;margin-inline:7px;border-radius:6px;background:var(--sunk)}
+.lvl-range{position:absolute;top:0;bottom:0;min-width:4px;border-radius:6px;background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}
+.lvl-avg,.lvl-prev{position:absolute;top:50%;width:14px;height:14px;border-radius:50%;transform:translate(-50%,-50%)}
+.lvl-avg{background:var(--ink);box-shadow:0 0 0 2px var(--surface)}
+.lvl-prev{background:var(--surface);border:2px solid var(--muted)}
+.lvl-ticks{position:relative;height:16px;margin-inline:7px;font-size:.72rem;color:var(--muted)}
+.lvl-ticks span{position:absolute;transform:translateX(-50%);white-space:nowrap}
+.lvl-ticks span:first-child{transform:none}
+.lvl-ticks span:last-child{transform:translateX(-100%)}
+.legend i.lg-range{width:18px;height:10px;border-radius:4px;background:var(--accent-soft);box-shadow:inset 0 0 0 1px var(--accent)}
+.legend i.lg-avg{width:10px;height:10px;border-radius:50%;background:var(--ink)}
+.legend i.lg-prev{width:10px;height:10px;border-radius:50%;background:var(--surface);border:2px solid var(--muted)}
+.trow{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(48px,1fr) 88px 76px;gap:10px;align-items:center;font-size:.88rem}
+.trow.thead{font-size:.7rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600;align-items:end}
+.trow.thead span{line-height:1.25}
+.trow.thead span:last-child{text-align:center}
+.legend-groups{display:flex;flex-direction:column;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.lg-title{font-weight:600;color:var(--ink);min-width:150px}
+.tname{min-width:0;overflow-wrap:anywhere}
+.ttrack{height:8px;background:var(--sunk);border-radius:4px;overflow:hidden}
+.ttrack span{display:block;height:100%;background:var(--caution)}
+.tcount{color:var(--ink-2);white-space:nowrap}
+.tafter{justify-self:center;min-width:42px;text-align:center;padding:3px 6px;border-radius:6px;font-weight:600;border:1px solid var(--line)}
+
+/* trends */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.stat{background:var(--surface);padding:12px 14px;display:flex;flex-direction:column;gap:2px}
+.stat .v{font-size:1.35rem;font-weight:600;font-variant-numeric:tabular-nums}
+.stat .s{font-size:.78rem;color:var(--muted)}
+.chart-wrap{overflow-x:auto}
+.chart-wrap svg{display:block;width:100%;min-width:520px;height:auto}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.8rem;color:var(--ink-2)}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:6px;background:var(--ink)}
+.bars{display:flex;flex-direction:column;gap:6px}
+.bar-row{display:grid;grid-template-columns:minmax(0,220px) 1fr auto;gap:10px;align-items:center;font-size:.88rem}
+.bar-row .track{height:8px;background:var(--sunk);border-radius:4px;overflow:hidden}
+.bar-row .fill{height:100%;background:var(--accent)}
+.demo-banner{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 14px;border-radius:10px;border:1px dashed var(--caution);background:var(--caution-soft);font-size:.9rem}
+.demo-banner span{margin-right:auto}
+.empty{padding:28px 20px;border:1px dashed var(--line);border-radius:12px;text-align:center;display:flex;flex-direction:column;gap:12px;align-items:center}
+.empty p{color:var(--ink-2);max-width:48ch}
+.rangesel{display:flex;gap:4px}
+
+/* plan */
+.plan-step{display:grid;grid-template-columns:28px 1fr;gap:4px 12px}
+.plan-step .n{font-family:var(--display);font-size:1.2rem;color:var(--accent);grid-row:span 3;line-height:1.3}
+.copyline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+pre.report{white-space:pre-wrap;word-break:break-word;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;font-size:.82rem;max-height:340px;overflow:auto;margin:0}
+footer.note{font-size:.8rem;color:var(--muted);padding-block:28px 8px;max-width:70ch}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--tabbar-h) + 80px);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:.88rem;z-index:50}
+@media (prefers-reduced-motion:no-preference){.sv,.seg button,.chip{transition:background .12s,border-color .12s}}
+body{margin:0;-webkit-font-smoothing:antialiased}
+[hidden]{display:none!important}
+.theme-toggle{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 13px;font-size:.84rem;color:var(--ink-2);cursor:pointer}
+.theme-toggle:hover{border-color:var(--accent);color:var(--ink)}
+.theme-toggle svg{width:16px;height:16px;flex:none}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <h1>Дневник самонаблюдения</h1>
+      <span class="store-status" id="storeStatus">Подключаю хранилище…</span>
+    </div>
+    <button class="theme-toggle" type="button" id="themeToggle">Светлая тема</button>
+    <button class="help-btn" type="button" data-tab="plan">Нужна помощь сейчас</button>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="today" aria-selected="true">Сегодня</button>
+    <button role="tab" data-tab="calendar" aria-selected="false">Календарь</button>
+    <button role="tab" data-tab="trends" aria-selected="false">Динамика</button>
+    <button role="tab" data-tab="week" aria-selected="false">Неделя</button>
+    <button role="tab" data-tab="plan" aria-selected="false">План</button>
+    <button role="tab" data-tab="data" aria-selected="false">Данные</button>
+  </nav>
+
+  <main>
+    <section class="view" id="view-today"></section>
+    <section class="view" id="view-calendar" hidden></section>
+    <section class="view" id="view-trends" hidden></section>
+    <section class="view" id="view-week" hidden></section>
+    <section class="view" id="view-plan" hidden></section>
+    <section class="view" id="view-data" hidden></section>
+  </main>
+
+  <footer class="note">
+    Инструмент самонаблюдения и подготовки к приёму. Он не ставит диагноз и не даёт рекомендаций по дозам или схеме лечения — это решается только с лечащим психиатром. Пороги сигналов общие; их стоит обсудить с врачом. Если сейчас есть мысли о самоповреждении или суициде — звоните 112.
+  </footer>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(function(){
+"use strict";
+
+/* ---------- constants ---------- */
+const TRIGGERS=["Недосып / сбитый режим","Стресс","Сильные позитивные события","Смена часовых поясов","Алкоголь / вещества","Пропуск препарата","Болезнь","Гормональные изменения","Конфликт","Нарушение рутины","Смена сезона"];
+const WEEK_Q=[
+  "Как менялось настроение за неделю? Были ли резкие перепады?",
+  "Были ли дни с малой потребностью во сне при высокой энергии?",
+  "Были ли периоды выраженной подавленности, апатии?",
+  "Были ли импульсивные решения, о которых потом жалели?",
+  "Насколько стабильным был режим сна, еды и приёма препаратов?",
+  "Появились ли новые побочные эффекты? Есть ли повод связаться с врачом раньше?"
+];
+const PLAN_STEPS=[
+  ["signs","Мои предвестники ухудшения","Именно ваши, а не общие признаки. По одному на строку — они появятся отметками в ежедневной записи."],
+  ["coping","Что помогает мне самому","Конкретные, уже проверенные способы: дыхание с длинным выдохом, «5-4-3-2-1», прогулка…"],
+  ["places","Люди и места, которые помогают отвлечься",""],
+  ["people","Близкие, к которым можно обратиться напрямую","Имя и как связаться."],
+  ["pros","Специалисты и службы","Врач, психотерапевт, клиника, скорая психиатрическая помощь."],
+  ["restrict","Как ограничить доступ к опасным средствам","При необходимости — с помощью близкого человека."],
+  ["reasons","Что для меня важно и ради чего жить",""]
+];
+const DEFAULT_SETTINGS={meds:[],doctor:{name:"",phone:""},plan:{signs:"",coping:"",places:"",people:"",pros:"",restrict:"",reasons:""}};
+
+/* ---------- state ---------- */
+const S={
+  entries:{}, weeks:{}, settings:clone(DEFAULT_SETTINGS),
+  store:null, ready:false, tab:"today",
+  date:todayKey(), form:{}, dirty:false,
+  weekStart:mondayKey(todayKey()), weekForm:{}, weekDirty:false,
+  planForm:null, planDirty:false,
+  range:30, demo:false, demoEntries:null
+};
+
+/* ---------- utils ---------- */
+function clone(o){return JSON.parse(JSON.stringify(o))}
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function pad(n){return String(n).padStart(2,"0")}
+function keyOf(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())}
+function parseKey(k){const[y,m,d]=k.split("-").map(Number);return new Date(y,m-1,d)}
+function todayKey(){return keyOf(new Date())}
+function addDays(k,n){const d=parseKey(k);d.setDate(d.getDate()+n);return keyOf(d)}
+function mondayKey(k){const d=parseKey(k);const wd=(d.getDay()+6)%7;d.setDate(d.getDate()-wd);return keyOf(d)}
+function fmtLong(k){return parseKey(k).toLocaleDateString("ru-RU",{weekday:"long",day:"numeric",month:"long"})}
+function fmtShort(k){const d=parseKey(k);return pad(d.getDate())+"."+pad(d.getMonth()+1)}
+function fmtFull(k){const d=parseKey(k);return pad(d.getDate())+"."+pad(d.getMonth()+1)+"."+d.getFullYear()}
+function mins(t){if(!t)return null;const[h,m]=t.split(":").map(Number);return h*60+m}
+function sleepH(e){if(!e||!e.bed||!e.wake)return null;let m=mins(e.wake)-mins(e.bed);if(m<=0)m+=1440;return Math.round(m/6)/10}
+function moodOf(e){if(!e)return null;const a=[e.moodAM,e.moodPM].filter(v=>typeof v==="number");return a.length?a.reduce((x,y)=>x+y,0)/a.length:null}
+function avg(a){const b=a.filter(v=>typeof v==="number"&&!isNaN(v));return b.length?b.reduce((x,y)=>x+y,0)/b.length:null}
+function f1(v){return v==null?"—":(Math.round(v*10)/10).toLocaleString("ru-RU")}
+function lines(s){return String(s||"").split("\n").map(x=>x.trim()).filter(Boolean)}
+function moodColor(i){
+  if(i<=4)return `color-mix(in oklab,var(--dep) ${[0,100,78,56,34][i]}%,var(--surface))`;
+  if(i<=6)return "var(--mid)";
+  return `color-mix(in oklab,var(--man) ${[0,0,0,0,0,0,0,40,62,82,100][i]}%,var(--surface))`;
+}
+function medsTaken(e,meds){if(!e||!e.meds)return null;const list=meds.filter(m=>m in e.meds);if(!list.length)return null;return{taken:list.filter(m=>e.meds[m]).length,total:list.length}}
+function toast(msg){const t=document.getElementById("toast");t.textContent=msg;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,2400)}
+function $(id){return document.getElementById(id)}
+function entriesView(){return S.demo?S.demoEntries:S.entries}
+
+/* ---------- storage (файл на компьютере через window.diary) ---------- */
+
+function ingest(pairs){
+  const entries={},weeks={};let settings=null;
+  for(const[id,data]of pairs){
+    if(!data)continue;
+    if(id.startsWith("d-"))entries[id.slice(2)]=data;
+    else if(id.startsWith("w-"))weeks[id.slice(2)]=data;
+    else if(id==="settings")settings=data;
+  }
+  S.entries=entries;S.weeks=weeks;
+  S.settings=Object.assign(clone(DEFAULT_SETTINGS),settings||{});
+  S.settings.plan=Object.assign(clone(DEFAULT_SETTINGS.plan),(settings&&settings.plan)||{});
+  S.settings.doctor=Object.assign({name:"",phone:""},(settings&&settings.doctor)||{});
+  if(!S.dirty)loadForm();
+  if(!S.weekDirty)loadWeekForm();
+  if(!S.planDirty)S.planForm=null;
+  renderAll();
+}
+
+// Мобильная версия (iPhone) подключает свой мост web-bridge.js с isWeb=true.
+const IS_WEB=!!(window.diary&&window.diary.isWeb);
+const DEVICE=IS_WEB?"iphone":"pk";
+async function initStore(){
+  const st=$("storeStatus");
+  if(!window.diary){st.className="store-status local";st.textContent="Хранилище недоступно — запустите приложение, а не файл страницы";return}
+  try{
+    const all=await window.diary.getAll();
+    S.store={kind:"file",put:(id,data)=>window.diary.put(id,data)};
+    S.ready=true;
+    st.textContent=IS_WEB?"Записи хранятся только на этом телефоне":"Записи хранятся только на этом компьютере";
+    ingest(Object.entries(all||{}));
+  }catch(e){st.className="store-status local";st.textContent="Не удалось прочитать файл дневника"}
+}
+async function reloadStore(){const all=await window.diary.getAll();S.dirty=false;S.weekDirty=false;S.planDirty=false;ingest(Object.entries(all||{}))}
+
+async function save(id,data){
+  if(!S.store)throw new Error("not ready");
+  data=clone(data);data.updatedAt=Date.now();
+  await S.store.put(id,data);
+}
+function saveErr(e){toast("Не получилось сохранить: "+((e&&e.message)||"ошибка записи файла"))}
+
+/* ---------- alerts ---------- */
+function analyze(E,ref,meds){
+  const out=[];const get=k=>E[k];
+  const last=n=>{const r=[];for(let i=0;i<n;i++){const k=addDays(ref,-i);r.push([k,get(k)])}return r};
+  const l3=last(3),l4=last(4),l5=last(5),l7=last(7);
+  const sh=l5.find(([k,e])=>e&&e.selfharm==="yes");
+  if(sh)out.push({sev:"urgent",t:"Мысли о самоповреждении ("+fmtShort(sh[0])+")",d:"Это повод обратиться за помощью сразу, не дожидаясь приёма: врач, скорая психиатрическая помощь или 112. Не оставайтесь с этим в одиночку."});
+  const mixed=l3.find(([k,e])=>{if(!e)return false;const m=moodOf(e),s=sleepH(e);return m!=null&&m<=4&&((e.irrit||0)>=7||(e.anxiety||0)>=7)&&s!=null&&s<6});
+  if(mixed)out.push({sev:"urgent",t:"Подавленность вместе с напряжением и коротким сном ("+fmtShort(mixed[0])+")",d:"Памятка относит такое сочетание к признакам смешанного состояния с повышенным риском. Свяжитесь с врачом как можно скорее."});
+  const maniaDays=l3.filter(([k,e])=>{if(!e)return false;const s=sleepH(e),m=moodOf(e);return s!=null&&s<6&&((e.energy||0)>=7||(m!=null&&m>=7))}).length;
+  if(maniaDays>=2)out.push({sev:"doctor",t:"Мало сна при высокой энергии — "+maniaDays+" из последних 3 дней",d:"Сниженная потребность во сне без усталости — один из ранних признаков гипомании. Стоит сообщить врачу."});
+  const hi=l4.filter(([k,e])=>{const m=moodOf(e);return m!=null&&m>=8}).length;
+  if(hi>=2)out.push({sev:"doctor",t:"Настроение 8 и выше — "+hi+" из последних 4 дней",d:"Заметный подъём по шкале. Сверьтесь с личными предвестниками и обсудите с врачом."});
+  const rec=[];for(let i=0;i<7&&rec.length<3;i++){const e=get(addDays(ref,-i));const m=moodOf(e);if(m!=null)rec.push(m)}
+  if(rec.length===3&&rec.every(m=>m<=3))out.push({sev:"doctor",t:"Настроение 3 и ниже три записи подряд",d:"Устойчивое снижение несколько дней подряд — повод связаться с врачом."});
+  for(const med of meds){
+    const e0=get(ref),e1=get(addDays(ref,-1));
+    const miss=e=>e&&e.meds&&(med in e.meds)&&!e.meds[med];
+    if(miss(e0)&&miss(e1)){out.push({sev:"doctor",t:"Пропуск «"+med+"» два дня подряд",d:"Сообщите врачу о пропусках. Не меняйте дозу и схему самостоятельно."});}
+  }
+  const wakes=l7.map(([k,e])=>e&&mins(e.wake)).filter(v=>v!=null);
+  if(wakes.length>=4){const sp=Math.max(...wakes)-Math.min(...wakes);if(sp>=150)out.push({sev:"watch",t:"Время подъёма за неделю плавает на "+f1(sp/60)+" ч",d:"Сбитый режим сна — частый триггер эпизодов. Попробуйте держать одно время подъёма, включая выходные."})}
+  const signs=l3.map(([k,e])=>e&&e.signs&&e.signs.length?e.signs:null).filter(Boolean);
+  if(signs.length>=2){const u=[...new Set(signs.flat())];out.push({sev:"doctor",t:"Личные предвестники — "+signs.length+" из последних 3 дней",d:u.join(", ")+". Загляните в свой план на этот случай."})}
+  const imp=l5.filter(([k,e])=>e&&(e.impuls||0)>=2).length;
+  if(imp>=2)out.push({sev:"watch",t:"Заметная импульсивность — "+imp+" из последних 5 дней",d:"Отложите крупные решения и траты; расскажите близкому или врачу."});
+  const se=l3.find(([k,e])=>e&&e.sideEffects&&e.sideEffects.trim());
+  if(se)out.push({sev:"watch",t:"Записаны побочные эффекты",d:"Новые или усилившиеся побочные эффекты — повод сообщить врачу. Не отменяйте препарат самостоятельно."});
+  if(!S.demo&&Object.keys(E).length&&!l3.some(([k,e])=>e))out.push({sev:"watch",t:"Нет записей три дня",d:"Короткая запись лучше пропуска: хватит настроения и сна."});
+  const order={urgent:0,doctor:1,watch:2};
+  return out.sort((a,b)=>order[a.sev]-order[b.sev]);
+}
+function alertsHTML(list){
+  return `<div class="alerts">${list.map(a=>`<div class="alert ${a.sev}" role="${a.sev==="urgent"?"alert":"status"}"><span class="sev"></span><span class="t">${esc(a.t)}</span><span class="d">${esc(a.d)}</span></div>`).join("")}</div>`;
+}
+
+/* ---------- today ---------- */
+function loadForm(){S.form=clone(S.entries[S.date]||{});S.dirty=false}
+function scale(field,n,kind,ends){
+  const v=S.form[field];let h=`<div class="scale" role="group" style="--n:${n}">`;
+  for(let i=1;i<=n;i++)h+=`<button type="button" class="sv" data-f="${field}" data-v="${i}" aria-pressed="${v===i}" style="--c:${kind==="mood"?moodColor(i):"var(--accent-soft)"}">${i}</button>`;
+  h+="</div>";
+  if(ends)h+=`<div class="scale-ends"><span>${ends[0]}</span>${ends[2]?`<span>${ends[2]}</span>`:""}<span>${ends[1]}</span></div>`;
+  return h;
+}
+function seg(field,opts){return `<div class="seg" role="group">${opts.map(([v,l])=>`<button type="button" data-f="${field}" data-opt="${esc(v)}" aria-pressed="${String(S.form[field])===String(v)}">${esc(l)}</button>`).join("")}</div>`}
+function chips(field,opts){const cur=S.form[field]||[];return `<div class="chips">${opts.map(o=>`<button type="button" class="chip" data-f="${field}" data-chip="${esc(o)}" aria-pressed="${cur.includes(o)}">${esc(o)}</button>`).join("")}</div>`}
+function inp(field,type,attrs){const v=S.form[field];return `<input id="f-${field}" type="${type}" data-in="${field}" value="${v==null?"":esc(v)}" ${attrs||""}>`}
+function ta(field,ph){return `<textarea id="f-${field}" data-in="${field}" placeholder="${esc(ph||"")}">${esc(S.form[field]||"")}</textarea>`}
+
+function renderToday(){
+  const el=$("view-today");const f=S.form;const meds=S.settings.meds;
+  const signs=lines(S.settings.plan.signs);
+  const isToday=S.date===todayKey();
+  const al=analyze(S.entries,todayKey(),meds);
+  el.innerHTML=`
+  ${isToday&&al.length?alertsHTML(al):""}
+  <div class="daynav">
+    <h2>${isToday?"Сегодня, ":""}${esc(fmtLong(S.date))}</h2>
+    <button class="iconbtn" type="button" data-daynav="-1" aria-label="Предыдущий день">←</button>
+    <input type="date" id="datePick" value="${S.date}" max="${todayKey()}" style="width:auto">
+    <button class="iconbtn" type="button" data-daynav="1" aria-label="Следующий день" ${isToday?"disabled":""}>→</button>
+    ${isToday?"":`<button class="btn small" type="button" data-goday="${todayKey()}">К сегодняшнему дню</button>`}
+    <button class="btn small ghost" type="button" data-tab="calendar">Календарь</button>
+  </div>
+  ${dayStripHTML()}
+  <p class="lede">Заполняйте в одно и то же время, например вечером перед сном. Можно отметить только настроение и сон — остальное по возможности.</p>
+
+  <div class="panel">
+    <div class="block">
+      <div class="block-head"><h3>Настроение</h3><span class="hint">1 — глубокая депрессия, 10 — выраженная мания</span></div>
+      <div class="grid2">
+        <div class="field"><span class="fl">Утром</span>${scale("moodAM",10,"mood",["депрессия","мания","ровно"])}</div>
+        <div class="field"><span class="fl">Вечером</span>${scale("moodPM",10,"mood",["депрессия","мания","ровно"])}</div>
+      </div>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><h3>Сон и ритм дня</h3><span class="derived" id="sleepDerived"></span></div>
+      <div class="grid3">
+        <div class="field"><label class="fl" for="f-bed">Отбой накануне</label>${inp("bed","time")}</div>
+        <div class="field"><label class="fl" for="f-wake">Подъём</label>${inp("wake","time")}</div>
+        <div class="field"><label class="fl" for="f-daylight">Первый дневной свет</label>${inp("daylight","time")}</div>
+        <div class="field"><label class="fl" for="f-meals">Приёмов пищи</label>${inp("meals","number",'min="0" max="10" inputmode="numeric"')}</div>
+      </div>
+      <div class="field"><span class="fl">Качество сна</span>${scale("sleepQ",5,"plain",["плохо","отлично"])}</div>
+    </div>
+
+    <div class="block">
+      <h3>Энергия и напряжение</h3>
+      <div class="field"><span class="fl">Энергия, активность</span>${scale("energy",10,"plain",["нет сил","через край"])}</div>
+      <div class="grid2">
+        <div class="field"><span class="fl">Раздражительность</span>${scale("irrit",10,"plain",["нет","сильная"])}</div>
+        <div class="field"><span class="fl">Тревога</span>${scale("anxiety",10,"plain",["нет","сильная"])}</div>
+      </div>
+    </div>
+
+    <div class="block">
+      <h3>Мышление и поведение</h3>
+      <div class="grid2">
+        <div class="field"><span class="fl">Аппетит</span>${seg("appetite",[["norm","норма"],["up","повышен"],["down","снижен"]])}</div>
+        <div class="field"><span class="fl">Концентрация, память, темп мыслей и речи</span>${seg("cognition",[["norm","как обычно"],["fast","ускорены"],["slow","замедлены"],["scattered","рассеяны"]])}</div>
+      </div>
+      <div class="field"><span class="fl">Импульсивность, рискованные поступки</span>${seg("impuls",[[0,"нет"],[1,"немного"],[2,"заметно"],[3,"сильно"]])}</div>
+      <div class="field"><label class="fl" for="f-cogNote">Что именно было не так</label>${ta("cogNote","Например: перескакивал(а) с темы на тему, крупная незапланированная покупка")}</div>
+    </div>
+
+    <div class="block">
+      <div class="block-head"><h3>Препараты</h3><button type="button" class="btn ghost small" data-tab="data">Изменить список</button></div>
+      <div class="meds">${meds.length?meds.map(m=>`<label class="med"><input type="checkbox" data-med="${esc(m)}" ${f.meds&&f.meds[m]?"checked":""}> <span>${esc(m)} — принят(а) по схеме</span></label>`).join(""):`<p class="hint">Список препаратов пуст. Добавьте названия во вкладке «Для врача».</p>`}</div>
+      <div class="field"><label class="fl" for="f-sideEffects">Побочные эффекты</label>${ta("sideEffects","Если были — что и когда")}</div>
+    </div>
+
+    <div class="block">
+      <h3>Образ жизни</h3>
+      <div class="grid2">
+        <div class="field"><label class="fl" for="f-activity">Физическая активность, минут</label>${inp("activity","number",'min="0" max="600" inputmode="numeric"')}</div>
+        <div class="field"><span class="fl">Алкоголь и вещества</span>${seg("alcohol",[["none","не было"],["some","немного"],["much","заметно"]])}</div>
+      </div>
+    </div>
+
+    <div class="block">
+      <h3>Триггеры и предвестники</h3>
+      <div class="field"><span class="fl">Что сегодня могло повлиять</span>${chips("triggers",TRIGGERS)}</div>
+      <div class="field"><span class="fl">Мои личные предвестники</span>${signs.length?chips("signs",signs):`<p class="hint">Добавьте свои предвестники в первом пункте вкладки «План» — они появятся здесь отметками.</p>`}</div>
+    </div>
+
+    <div class="block">
+      <h3>Безопасность</h3>
+      <div class="field"><span class="fl">Были ли мысли о самоповреждении или смерти?</span>${seg("selfharm",[["no","нет"],["yes","да"]])}</div>
+      <div id="shBox"></div>
+    </div>
+
+    <div class="block">
+      <h3>День</h3>
+      <div class="field"><label class="fl" for="f-events">Значимые события</label>${ta("events","Что произошло, что порадовало или выбило из колеи")}</div>
+      <div class="field"><label class="fl" for="f-note">Заметки</label>${ta("note","Свободная запись")}</div>
+    </div>
+  </div>
+
+  <div class="savebar">
+    <span class="msg" id="saveMsg"></span>
+    <button type="button" class="btn primary" id="saveDay">Сохранить запись</button>
+  </div>`;
+  refreshDerived();
+}
+function refreshDerived(){
+  const s=sleepH(S.form);const d=$("sleepDerived");
+  if(d)d.innerHTML=s!=null?`Сон: <strong class="num">${f1(s)} ч</strong>${s<6?" — мало":""}`:"";
+  const box=$("shBox");
+  if(box)box.innerHTML=S.form.selfharm==="yes"?`<div class="urgent-box"><p><strong>Пожалуйста, не оставайтесь с этим одни.</strong> Позвоните лечащему врачу, в скорую психиатрическую помощь или по номеру <strong>112</strong>. Во вкладке «План» — ваши контакты и шаги.</p><div class="row" style="margin-top:10px"><button type="button" class="btn small" data-tab="plan">Открыть мой план</button></div></div>`:"";
+  const m=$("saveMsg");
+  if(m){
+    const saved=S.entries[S.date];
+    if(!S.ready){m.textContent="Подключаю хранилище…";m.className="msg"}
+    else if(S.dirty){m.textContent="Есть несохранённые изменения";m.className="msg dirty"}
+    else if(saved&&saved.updatedAt){m.textContent="Сохранено в "+new Date(saved.updatedAt).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"});m.className="msg"}
+    else{m.textContent="Запись за этот день ещё не сохранена";m.className="msg"}
+    const b=$("saveDay");if(b)b.disabled=!S.ready;
+  }
+}
+function markDirty(){S.dirty=true;refreshDerived()}
+function goDate(k){
+  if(k>todayKey())return false;
+  if(k===S.date)return true;
+  if(S.dirty&&!goDate.warned){goDate.warned=true;toast("Изменения не сохранены. Нажмите ещё раз, чтобы уйти без сохранения.");return false}
+  goDate.warned=false;S.date=k;loadForm();renderToday();return true;
+}
+
+/* ---------- отметки дня: общая часть для календаря и полосы дней ---------- */
+function dayMood(e){if(!e)return null;const m=typeof e.moodPM==="number"?e.moodPM:moodOf(e);return m==null?null:Math.round(m)}
+function dayMarks(e,meds){
+  const out=[];if(!e)return out;
+  const s=sleepH(e);
+  if(e.selfharm==="yes")out.push(["harm","Мысли о самоповреждении"]);
+  if(s!=null&&s<6)out.push(["short","Сон меньше 6 ч"]);
+  if(s!=null&&s>10)out.push(["long","Сон больше 10 ч"]);
+  const t=medsTaken(e,meds);if(t&&t.taken<t.total)out.push(["miss","Пропуск препарата"]);
+  if((e.impuls||0)>=2)out.push(["imp","Заметная импульсивность"]);
+  if(e.signs&&e.signs.length)out.push(["sign","Личные предвестники"]);
+  return out;
+}
+function dayTitle(k,e,meds){
+  if(!e)return fmtLong(k)+" — нет записи";
+  const t=medsTaken(e,meds),s=sleepH(e);
+  return [fmtLong(k),"настроение "+(e.moodAM??"–")+" / "+(e.moodPM??"–"),"сон "+(s==null?"–":f1(s)+" ч"),t?"препараты "+t.taken+"/"+t.total:""].concat(dayMarks(e,meds).map(x=>x[1].toLowerCase())).filter(Boolean).join(" · ");
+}
+function moodFill(m){return m==null?"var(--accent-soft)":`color-mix(in oklab,${moodColor(m)} 60%,var(--surface))`}
+function marksHTML(e,meds){return `<span class="marks">${dayMarks(e,meds).map(([c])=>`<i class="mk ${c}"></i>`).join("")}</span>`}
+function dayStripHTML(){
+  const tk=todayKey();let end=addDays(S.date,6);if(end>tk)end=tk;
+  const keys=rangeKeys(14,end);const meds=S.settings.meds;
+  return `<div class="daystrip" role="group" aria-label="Последние дни">${keys.map(k=>{const e=S.entries[k];const m=dayMood(e);const d=parseKey(k);
+    return `<button type="button" class="dchip${k===S.date?" sel":""}${k===tk?" today":""}" data-goday="${k}" title="${esc(dayTitle(k,e,meds))}">
+      <span class="wd">${d.toLocaleDateString("ru-RU",{weekday:"short"})}</span>
+      <span class="dn num" style="background:${e?moodFill(m):"transparent"}">${d.getDate()}</span>
+      ${marksHTML(e,meds)}</button>`}).join("")}</div>`;
+}
+
+/* ---------- календарь ---------- */
+function monthStart(k){return k.slice(0,8)+"01"}
+function addMonths(k,n){const d=parseKey(k);d.setDate(1);d.setMonth(d.getMonth()+n);return keyOf(d)}
+function renderCalendar(){
+  const el=$("view-calendar");const E=entriesView();const meds=S.settings.meds;const tk=todayKey();
+  const m0=S.calMonth||(S.calMonth=monthStart(S.date));
+  const first=parseKey(m0),days=new Date(first.getFullYear(),first.getMonth()+1,0).getDate(),lead=(first.getDay()+6)%7;
+  const isCur=m0===monthStart(tk);
+  const sel=S.calSel||(S.calSel=S.date);
+  let cells="";
+  for(let i=0;i<lead;i++)cells+=`<span class="cday blank"></span>`;
+  const monthKeys=[];
+  for(let d=1;d<=days;d++){
+    const k=m0.slice(0,8)+pad(d);const e=E[k];const fut=k>tk;const m=dayMood(e);
+    if(!fut)monthKeys.push(k);
+    cells+=`<button type="button" class="cday${e?" has":""}${k===tk?" today":""}${k===sel?" sel":""}" data-calday="${k}" ${fut?"disabled":""} title="${esc(dayTitle(k,e,meds))}" style="${e?"background:"+moodFill(m):""}">
+      <span class="cd num">${d}</span><span class="cm num">${m!=null?m:e?"•":""}</span>${marksHTML(e,meds)}</button>`;
+  }
+  const st=statsFor(monthKeys,E,meds);
+  const missDays=monthKeys.filter(k=>{const t=medsTaken(E[k],meds);return t&&t.taken<t.total}).length;
+  const mn=first.toLocaleDateString("ru-RU",{month:"long"});const monthName=mn.charAt(0).toUpperCase()+mn.slice(1)+" "+first.getFullYear();
+  const se=E[sel];const ss=sleepH(se);const st2=medsTaken(se,meds);
+  const appetite={norm:"норма",up:"повышен",down:"снижен"},cog={norm:"как обычно",fast:"ускорены",slow:"замедлены",scattered:"рассеяны"};
+  el.innerHTML=`
+  ${S.demo?`<div class="demo-banner"><span>Календарь показывает пример с вымышленными данными.</span><button class="btn small" type="button" id="demoOff">Выйти из примера</button></div>`:""}
+  <div class="daynav"><h2>${esc(monthName)}</h2>
+    <button class="iconbtn" type="button" data-calnav="-1" aria-label="Предыдущий месяц">←</button>
+    <button class="btn small" type="button" data-calnav="0" ${isCur?"disabled":""}>Текущий месяц</button>
+    <button class="iconbtn" type="button" data-calnav="1" aria-label="Следующий месяц" ${isCur?"disabled":""}>→</button></div>
+  <div class="cal-layout">
+    <div class="panel">
+      <div class="calgrid">${["пн","вт","ср","чт","пт","сб","вс"].map(w=>`<span class="cwd">${w}</span>`).join("")}${cells}</div>
+      <div class="legend" style="margin-top:12px">
+        <span><i style="background:${moodFill(2)};height:10px"></i>Цвет — настроение вечером (число в клетке)</span>
+        <span><i class="mk short"></i>Сон &lt; 6 ч</span><span><i class="mk long"></i>Сон &gt; 10 ч</span>
+        <span><i class="mk miss"></i>Пропуск препарата</span><span><i class="mk imp"></i>Импульсивность</span>
+        <span><i class="mk sign"></i>Предвестники</span><span><i class="mk harm"></i>Мысли о самоповреждении</span>
+      </div>
+    </div>
+    <div class="panel field cal-side">
+      <span class="label">${esc(fmtLong(sel))}</span>
+      ${se?`<dl class="kv">
+        <dt>Настроение</dt><dd class="num">утром ${se.moodAM??"–"}, вечером ${se.moodPM??"–"}</dd>
+        <dt>Сон</dt><dd class="num">${ss==null?"—":f1(ss)+" ч"}${se.bed&&se.wake?` (${esc(se.bed)}–${esc(se.wake)})`:""}${se.sleepQ?", качество "+se.sleepQ+"/5":""}</dd>
+        <dt>Энергия</dt><dd class="num">${se.energy??"—"}</dd>
+        <dt>Раздраж. / тревога</dt><dd class="num">${se.irrit??"—"} / ${se.anxiety??"—"}</dd>
+        ${se.appetite?`<dt>Аппетит</dt><dd>${appetite[se.appetite]||"—"}</dd>`:""}
+        ${se.cognition?`<dt>Мышление</dt><dd>${cog[se.cognition]||"—"}</dd>`:""}
+        <dt>Импульсивность</dt><dd>${["нет","немного","заметно","сильно"][se.impuls]||"—"}</dd>
+        <dt>Препараты</dt><dd>${st2?meds.filter(m=>se.meds&&m in se.meds).map(m=>esc(m)+(se.meds[m]?" ✓":" — пропуск")).join("<br>"):"—"}</dd>
+        ${(se.triggers||[]).length?`<dt>Триггеры</dt><dd>${esc(se.triggers.join(", "))}</dd>`:""}
+        ${(se.signs||[]).length?`<dt>Предвестники</dt><dd>${esc(se.signs.join(", "))}</dd>`:""}
+        ${se.selfharm==="yes"?`<dt>Безопасность</dt><dd style="color:var(--warn);font-weight:600">мысли о самоповреждении</dd>`:""}
+        ${se.sideEffects?`<dt>Побочные</dt><dd>${esc(se.sideEffects)}</dd>`:""}
+        ${se.events?`<dt>События</dt><dd>${esc(se.events)}</dd>`:""}
+        ${se.note?`<dt>Заметки</dt><dd>${esc(se.note)}</dd>`:""}
+      </dl>`:`<p class="hint">${sel>tk?"Этот день ещё не наступил.":"Записи за этот день нет."}</p>`}
+      ${S.demo||sel>tk?"":`<button class="btn primary" type="button" data-openday="${sel}">${se?"Открыть и изменить запись":"Заполнить этот день"}</button>`}
+    </div>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="label">Записей</span><span class="v">${st.filled}</span><span class="s">из ${monthKeys.length} дней</span></div>
+    <div class="stat"><span class="label">Настроение</span><span class="v">${f1(st.moodAvg)}</span><span class="s num">от ${f1(st.moodMin)} до ${f1(st.moodMax)}</span></div>
+    <div class="stat"><span class="label">Сон</span><span class="v">${f1(st.sleepAvg)} ч</span><span class="s">ночей &lt; 6 ч: ${st.shortNights}</span></div>
+    <div class="stat"><span class="label">Препараты</span><span class="v">${st.adh==null?"—":Math.round(st.adh*100)+"%"}</span><span class="s">дней с пропуском: ${missDays}</span></div>
+  </div>`;
+}
+
+/* ---------- trends ---------- */
+function rangeKeys(n,end){const r=[];for(let i=n-1;i>=0;i--)r.push(addDays(end,-i));return r}
+function chartSVG(keys,E,meds){
+  const W=720,L=34,R=10,top=14,mH=170,sTop=214,sH=70,medY=312,H=340;
+  const n=keys.length,step=(W-L-R)/Math.max(n-1,1);
+  const x=i=>L+i*step, ym=v=>top+(10-v)/9*mH, ys=h=>sTop+sH-Math.min(h,12)/12*sH;
+  let g="";
+  g+=`<rect x="${L}" y="${ym(7)}" width="${W-L-R}" height="${ym(4)-ym(7)}" fill="var(--accent-soft)"/>`;
+  for(const v of[1,4,7,10]){g+=`<line x1="${L}" x2="${W-R}" y1="${ym(v)}" y2="${ym(v)}" stroke="var(--line)" stroke-width="1"/><text x="${L-8}" y="${ym(v)+4}" text-anchor="end" font-size="11" fill="var(--muted)">${v}</text>`}
+  g+=`<text x="${W-R}" y="${ym(10)-4}" text-anchor="end" font-size="10" fill="var(--muted)">мания</text><text x="${W-R}" y="${ym(1)+14}" text-anchor="end" font-size="10" fill="var(--muted)">депрессия</text>`;
+  const line=(fn,attrs)=>{let d="",pen=false;keys.forEach((k,i)=>{const v=fn(E[k]);if(v==null){pen=false;return}d+=(pen?"L":"M")+x(i).toFixed(1)+" "+ym(v).toFixed(1)+" ";pen=true});return d?`<path d="${d}" fill="none" ${attrs}/>`:""};
+  g+=line(e=>e&&typeof e.energy==="number"?e.energy:null,`stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4 4"`);
+  g+=line(e=>e&&typeof e.moodPM==="number"?e.moodPM:null,`stroke="var(--ink)" stroke-width="2" stroke-linejoin="round"`);
+  keys.forEach((k,i)=>{const e=E[k];if(!e)return;
+    if(typeof e.moodAM==="number")g+=`<circle cx="${x(i)}" cy="${ym(e.moodAM)}" r="3.5" fill="var(--surface)" stroke="var(--ink-2)" stroke-width="1.5"/>`;
+    if(typeof e.moodPM==="number")g+=`<circle cx="${x(i)}" cy="${ym(e.moodPM)}" r="4.5" fill="${moodColor(e.moodPM)}" stroke="var(--ink)" stroke-width="1.5"/>`;
+    if(e.selfharm==="yes")g+=`<circle cx="${x(i)}" cy="${top-4}" r="4" fill="var(--warn)"/>`;
+  });
+  g+=`<text x="${L}" y="${sTop-8}" font-size="11" fill="var(--muted)">Сон, часы</text>`;
+  for(const h of[6,9]){g+=`<line x1="${L}" x2="${W-R}" y1="${ys(h)}" y2="${ys(h)}" stroke="var(--line)" stroke-dasharray="2 3"/><text x="${L-8}" y="${ys(h)+4}" text-anchor="end" font-size="11" fill="var(--muted)">${h}</text>`}
+  const bw=Math.max(2,Math.min(14,step*0.6));
+  keys.forEach((k,i)=>{const s=sleepH(E[k]);if(s==null)return;const c=s<6?"var(--man)":s>10?"var(--dep)":"var(--accent)";g+=`<rect x="${(x(i)-bw/2).toFixed(1)}" y="${ys(s).toFixed(1)}" width="${bw.toFixed(1)}" height="${(sTop+sH-ys(s)).toFixed(1)}" rx="1.5" fill="${c}"/>`});
+  g+=`<line x1="${L}" x2="${W-R}" y1="${sTop+sH}" y2="${sTop+sH}" stroke="var(--line)"/>`;
+  g+=`<text x="${L}" y="${medY-12}" font-size="11" fill="var(--muted)">Приём препаратов</text>`;
+  keys.forEach((k,i)=>{const t=medsTaken(E[k],meds);const c=!t?"var(--sunk)":t.taken===t.total?"var(--ok)":t.taken?"var(--man)":"var(--warn)";g+=`<rect x="${(x(i)-bw/2).toFixed(1)}" y="${medY-4}" width="${bw.toFixed(1)}" height="8" rx="2" fill="${c}"/>`});
+  const every=Math.ceil(n/10);
+  keys.forEach((k,i)=>{if((n-1-i)%every===0)g+=`<text x="${x(i)}" y="${H-6}" text-anchor="${i===0?"start":i===n-1?"end":"middle"}" font-size="10.5" fill="var(--muted)">${fmtShort(k)}</text>`});
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="График настроения, сна и приёма препаратов">${g}</svg>`;
+}
+function statsFor(keys,E,meds){
+  const es=keys.map(k=>E[k]).filter(Boolean);
+  const moods=es.map(moodOf).filter(v=>v!=null);
+  const sleeps=es.map(sleepH).filter(v=>v!=null);
+  const wakes=es.map(e=>mins(e.wake)).filter(v=>v!=null);
+  let sd=null;if(wakes.length>=3){const m=avg(wakes);sd=Math.sqrt(avg(wakes.map(w=>(w-m)**2)))}
+  let t=0,tot=0;es.forEach(e=>{const r=medsTaken(e,meds);if(r){t+=r.taken;tot+=r.total}});
+  const trig={};es.forEach(e=>(e.triggers||[]).forEach(x=>trig[x]=(trig[x]||0)+1));
+  return{filled:es.length,moodAvg:avg(moods),moodMin:moods.length?Math.min(...moods):null,moodMax:moods.length?Math.max(...moods):null,
+    sleepAvg:avg(sleeps),shortNights:sleeps.filter(s=>s<6).length,wakeSD:sd,adh:tot?t/tot:null,
+    energy:avg(es.map(e=>e.energy)),irrit:avg(es.map(e=>e.irrit)),anxiety:avg(es.map(e=>e.anxiety)),
+    impulsDays:es.filter(e=>(e.impuls||0)>=2).length,trig};
+}
+function renderTrends(){
+  const el=$("view-trends");const E=entriesView();const meds=S.settings.meds;
+  const has=Object.keys(E).length>0;
+  if(!has){
+    el.innerHTML=`<h2>Динамика</h2><div class="empty"><p>Здесь появится график настроения, сна и приёма препаратов, а ещё сигналы, на которые стоит обратить внимание. Нужно хотя бы несколько ежедневных записей.</p><div class="row" style="justify-content:center"><button class="btn primary" type="button" data-tab="today">Сделать первую запись</button><button class="btn" type="button" id="demoOn">Посмотреть на примере</button></div></div>`;
+    return;
+  }
+  const keys=rangeKeys(S.range,todayKey());const st=statsFor(keys,E,meds);
+  const al=analyze(E,todayKey(),meds);
+  const trig=Object.entries(st.trig).sort((a,b)=>b[1]-a[1]);const tmax=trig.length?trig[0][1]:1;
+  el.innerHTML=`
+  ${S.demo?`<div class="demo-banner"><span>Это пример с вымышленными данными — не ваши записи.</span><button class="btn small" type="button" id="demoOff">Выйти из примера</button></div>`:""}
+  <div class="block-head"><h2>Динамика</h2>
+    <div class="row"><div class="rangesel seg">${[14,30,90].map(n=>`<button type="button" data-range="${n}" aria-pressed="${S.range===n}">${n} дней</button>`).join("")}</div>
+    ${S.demo?"":`<button class="btn small" type="button" data-pdf="${S.range}">Сохранить в PDF</button>`}</div></div>
+  ${al.length?`<div class="field"><span class="label">Сигналы за последние дни</span>${alertsHTML(al)}</div>`:`<p class="hint">Сигналов, требующих внимания, за последние дни нет.</p>`}
+  <div class="stats">
+    <div class="stat"><span class="label">Настроение</span><span class="v">${f1(st.moodAvg)}</span><span class="s num">от ${f1(st.moodMin)} до ${f1(st.moodMax)}</span></div>
+    <div class="stat"><span class="label">Сон</span><span class="v">${f1(st.sleepAvg)} ч</span><span class="s">ночей меньше 6 ч: ${st.shortNights}</span></div>
+    <div class="stat"><span class="label">Режим подъёма</span><span class="v">${st.wakeSD==null?"—":"±"+Math.round(st.wakeSD)+" мин"}</span><span class="s">разброс времени подъёма</span></div>
+    <div class="stat"><span class="label">Препараты</span><span class="v">${st.adh==null?"—":Math.round(st.adh*100)+"%"}</span><span class="s">отмеченных приёмов</span></div>
+    <div class="stat"><span class="label">Записей</span><span class="v">${st.filled}</span><span class="s">из ${S.range} дней</span></div>
+  </div>
+  <div class="panel">
+    <div class="chart-wrap">${chartSVG(keys,E,meds)}</div>
+    <div class="legend-groups">
+      <div class="legend"><span class="lg-title">Настроение и энергия</span>
+        <span><i></i>Настроение вечером</span>
+        <span><i style="background:none;border:1.5px solid var(--ink-2);width:9px;height:9px;border-radius:50%"></i>Настроение утром</span>
+        <span><i style="background:repeating-linear-gradient(90deg,var(--muted) 0 4px,transparent 4px 8px)"></i>Энергия</span>
+        <span><i style="background:var(--accent-soft);height:10px"></i>Середина шкалы, 4–7</span>
+        <span><i style="background:${moodFill(2)};height:10px;width:10px;border-radius:50%"></i><i style="background:${moodFill(9)};height:10px;width:10px;border-radius:50%"></i>Цвет точки: ниже — к депрессии, выше — к мании</span></div>
+      <div class="legend"><span class="lg-title">Сон, часы</span>
+        <span><i style="background:var(--man);height:8px"></i>Меньше 6 ч</span>
+        <span><i style="background:var(--accent);height:8px"></i>6–10 ч</span>
+        <span><i style="background:var(--dep);height:8px"></i>Больше 10 ч</span>
+        <span><i style="background:none;border-top:1px dashed var(--muted);height:0"></i>Линии 6 и 9 ч — для ориентира</span></div>
+      <div class="legend"><span class="lg-title">Приём препаратов</span>
+        <span><i style="background:var(--ok);height:8px"></i>Все приняты</span>
+        <span><i style="background:var(--man);height:8px"></i>Часть пропущена</span>
+        <span><i style="background:var(--warn);height:8px"></i>Все пропущены</span>
+        <span><i style="background:var(--sunk);height:8px"></i>Нет отметки</span></div>
+      <p class="hint">Красная точка над графиком — день, когда отмечены мысли о самоповреждении.</p>
+    </div>
+  </div>
+  <div class="grid2">
+    ${levelsPanelHTML(keys,E)}
+    ${triggersPanelHTML(keys,E,st,trig)}
+  </div>`;
+}
+
+/* Шкалы 1–10: разброс за период, среднее и среднее за предыдущий такой же период. */
+function levelsPanelHTML(keys,E){
+  const prevKeys=rangeKeys(keys.length,addDays(keys[0],-1));
+  const vals=(ks,f)=>ks.map(k=>E[k]&&E[k][f]).filter(v=>typeof v==="number");
+  const pos=v=>((v-1)/9*100).toFixed(1);
+  const rows=[["energy","Энергия","нет сил","через край"],["irrit","Раздражительность","нет","сильная"],["anxiety","Тревога","нет","сильная"]].map(([f,l,lo,hi])=>{
+    const a=vals(keys,f),p=vals(prevKeys,f);
+    const mean=avg(a),pmean=avg(p);
+    let delta="";
+    if(mean!=null&&pmean!=null){const d=mean-pmean;delta=Math.abs(d)<0.3?"как раньше":(d>0?"↑ ":"↓ ")+f1(Math.abs(d))+" к прошлому периоду"}
+    return `<div class="lvl">
+      <div class="lvl-head"><span class="lvl-name">${l}</span><span class="num"><strong>${f1(mean)}</strong>${delta?` <span class="hint">${delta}</span>`:""}</span></div>
+      ${a.length?`<div class="lvl-track" title="${l}: от ${Math.min(...a)} до ${Math.max(...a)}, среднее ${f1(mean)}${pmean!=null?", в прошлом периоде "+f1(pmean):""}">
+        <span class="lvl-range" style="left:${pos(Math.min(...a))}%;width:${(pos(Math.max(...a))-pos(Math.min(...a))).toFixed(1)}%"></span>
+        ${pmean!=null?`<span class="lvl-prev" style="left:${pos(pmean)}%"></span>`:""}
+        <span class="lvl-avg" style="left:${pos(mean)}%"></span>
+      </div>
+      <div class="lvl-ticks num"><span style="left:0">1 · ${lo}</span><span style="left:${pos(4)}%">4</span><span style="left:${pos(7)}%">7</span><span style="left:100%">${hi} · 10</span></div>`:`<p class="hint">Нет оценок за период</p>`}
+    </div>`}).join("");
+  return `<div class="panel field"><span class="label">Энергия и напряжение за ${keys.length} дней</span>
+    ${rows}
+    <div class="legend">
+      <span><i class="lg-range"></i>Разброс: от самой низкой до самой высокой оценки</span>
+      <span><i class="lg-avg"></i>Среднее за период</span>
+      <span><i class="lg-prev"></i>Среднее за предыдущие ${keys.length} дней</span>
+    </div>
+  </div>`;
+}
+
+/* Триггеры: сколько дней отмечен и какое настроение было в следующие 3 дня. */
+function triggersPanelHTML(keys,E,st,trig){
+  if(!trig.length)return `<div class="panel field"><span class="label">Карта триггеров</span><p class="hint">За этот период триггеры не отмечались. Их можно отметить в ежедневной записи, в разделе «Триггеры и предвестники».</p></div>`;
+  const filled=st.filled||1;
+  const after=t=>{const ms=[];keys.forEach(k=>{const e=E[k];if(!e||!(e.triggers||[]).includes(t))return;for(let i=1;i<=3;i++){const m=dayMood(E[addDays(k,i)]);if(m!=null)ms.push(m)}});return avg(ms)};
+  const base=st.moodAvg;
+  const rows=trig.slice(0,8).map(([t,c])=>{
+    const a=after(t);const share=Math.round(c/filled*100);
+    let cmp="";if(a!=null&&base!=null){const d=a-base;cmp=Math.abs(d)<0.5?"около обычного":d>0?"выше обычного":"ниже обычного"}
+    return `<div class="trow">
+      <span class="tname">${esc(t)}</span>
+      <span class="ttrack"><span style="width:${Math.max(4,share)}%"></span></span>
+      <span class="num tcount">${c} дн. · ${share}%</span>
+      <span class="tafter num" style="background:${a!=null?moodFill(Math.round(a)):"var(--sunk)"}" title="${a!=null?"Среднее вечернее настроение в 3 дня после: "+f1(a)+" ("+cmp+")":"Нет записей в следующие дни"}">${a!=null?f1(a):"—"}</span>
+    </div>`}).join("");
+  return `<div class="panel field"><span class="label">Карта триггеров за ${keys.length} дней</span>
+    <div class="trow thead"><span>Триггер</span><span style="grid-column:span 2">Как часто</span><span>Настроение в 3 дня после</span></div>
+    ${rows}
+    <div class="legend">
+      <span><i style="background:var(--caution);height:8px"></i>Доля заполненных дней с этой отметкой</span>
+      <span><i style="background:${moodFill(3)};height:10px;width:10px"></i><i style="background:${moodFill(8)};height:10px;width:10px"></i>Среднее настроение в 3 дня после триггера (1 — депрессия, 10 — мания). Обычно за период: ${f1(base)}</span>
+    </div>
+    <p class="hint">Совпадение по времени — ещё не причина. Это повод обсудить с врачом, что обычно предшествует подъёмам и спадам.</p>
+  </div>`;
+}
+function makeDemo(){
+  const E={};const dm=S.settings.meds.length?S.settings.meds:["Препарат 1","Препарат 2"];let seed=7;const rnd=()=>(seed=(seed*16807)%2147483647)/2147483647;
+  const end=todayKey();const n=45;
+  for(let i=n-1;i>=0;i--){
+    const k=addDays(end,-i),day=n-1-i;
+    let base=5.5,sleep=7.6,energy=5,irrit=3,anx=3,imp=0,tr=[];
+    if(day>=14&&day<25){const t=(day-14)/10;base=6+t*2.4;sleep=7-t*2.3;energy=6+t*2.5;irrit=3+t*4;imp=t>0.5?2:1;if(day===15||day===16)tr=["Недосып / сбитый режим","Стресс"]}
+    else if(day>=25&&day<31){base=7-(day-25)*0.5;sleep=6.5+(day-25)*0.2;energy=6-(day-25)*0.3}
+    else if(day>=31&&day<38){base=4.2;sleep=8.8;energy=3.5;anx=5;if(day===32)tr=["Конфликт"]}
+    const m=v=>Math.max(1,Math.min(10,Math.round(v+(rnd()-0.5)*1.4)));
+    const sl=sleep+(rnd()-0.5)*0.8;const wake=7*60+Math.round((rnd()-0.5)*50)+(day>=14&&day<25?-60:0);
+    const bed=(wake-Math.round(sl*60)+1440)%1440;const tt=x=>pad(Math.floor(x/60))+":"+pad(x%60);
+    E[k]={moodAM:m(base-0.3),moodPM:m(base),bed:tt(bed),wake:tt(wake),sleepQ:Math.max(1,Math.min(5,Math.round(sl/2))),energy:m(energy),irrit:m(irrit),anxiety:m(anx),
+      impuls:imp,appetite:"norm",cognition:day>=18&&day<25?"fast":"norm",meds:Object.fromEntries(dm.map((m,j)=>[m,!(day===21||(j>0&&day===22))])),triggers:tr,signs:[],alcohol:day===19?"some":"none",activity:Math.round(20+rnd()*40)};
+    if(i<3&&day>=0){E[k].moodPM=6;E[k].moodAM=5}
+  }
+  return E;
+}
+
+/* ---------- week ---------- */
+function loadWeekForm(){S.weekForm=clone(S.weeks[S.weekStart]||{answers:WEEK_Q.map(()=>""),earlyDoctor:false});S.weekDirty=false}
+function renderWeek(){
+  const el=$("view-week");const E=entriesView();const meds=S.settings.meds;
+  const keys=rangeKeys(7,addDays(S.weekStart,6));const st=statsFor(keys,E,meds);
+  const isCur=S.weekStart===mondayKey(todayKey());
+  const w=S.weekForm;const saved=S.weeks[S.weekStart];
+  const days=keys.map(k=>{const e=E[k];const m=e&&typeof e.moodPM==="number"?e.moodPM:moodOf(e);const s=sleepH(e);
+    return `<div class="field" style="align-items:center;gap:4px"><span class="hint">${parseKey(k).toLocaleDateString("ru-RU",{weekday:"short"})}</span><span class="num" style="width:36px;height:36px;border-radius:8px;display:grid;place-items:center;font-weight:600;background:${m!=null?moodColor(Math.round(m)):"var(--sunk)"};border:1px solid var(--line)">${m!=null?Math.round(m):"·"}</span><span class="hint num">${s!=null?f1(s)+" ч":"—"}</span></div>`}).join("");
+  el.innerHTML=`
+  ${S.demo?`<div class="demo-banner"><span>Сводка ниже построена по примеру, не по вашим записям.</span><button class="btn small" type="button" id="demoOff">Выйти из примера</button></div>`:""}
+  <div class="daynav"><h2>Неделя ${fmtShort(S.weekStart)} — ${fmtShort(addDays(S.weekStart,6))}</h2>
+    <button class="iconbtn" type="button" data-weeknav="-7" aria-label="Предыдущая неделя">←</button>
+    <button class="iconbtn" type="button" data-weeknav="7" aria-label="Следующая неделя" ${isCur?"disabled":""}>→</button></div>
+  <p class="lede">Раз в неделю — развёрнутый обзор. Так проще заметить тенденции, которые не видны день ото дня.</p>
+  <div class="panel field"><span class="label">Как прошла неделя по записям</span>
+    <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;max-width:420px">${days}</div>
+    <p class="derived">Записей: <strong>${st.filled} из 7</strong> · настроение от <strong class="num">${f1(st.moodMin)}</strong> до <strong class="num">${f1(st.moodMax)}</strong> · сон в среднем <strong class="num">${f1(st.sleepAvg)} ч</strong>, коротких ночей: <strong>${st.shortNights}</strong> · препараты: <strong>${st.adh==null?"—":Math.round(st.adh*100)+"%"}</strong> · импульсивных дней: <strong>${st.impulsDays}</strong></p>
+  </div>
+  <div class="panel">
+    ${WEEK_Q.map((q,i)=>`<div class="block"><label class="fl" for="wq-${i}" style="font-weight:500">${esc(q)}</label><textarea id="wq-${i}" data-wq="${i}">${esc((w.answers||[])[i]||"")}</textarea></div>`).join("")}
+    <div class="block"><label class="med" style="background:var(--caution-soft)"><input type="checkbox" id="wEarly" ${w.earlyDoctor?"checked":""}><span>Хочу связаться с врачом раньше планового приёма</span></label></div>
+  </div>
+  <div class="savebar"><span class="msg ${S.weekDirty?"dirty":""}" id="weekMsg">${S.weekDirty?"Есть несохранённые изменения":saved?"Обзор сохранён":"Обзор за эту неделю ещё не заполнен"}</span><button class="btn primary" type="button" id="saveWeek" ${S.ready?"":"disabled"}>Сохранить обзор</button></div>`;
+}
+
+/* ---------- plan ---------- */
+function renderPlan(){
+  const el=$("view-plan");
+  if(!S.planForm)S.planForm={plan:clone(S.settings.plan),doctor:clone(S.settings.doctor)};
+  const p=S.planForm;const dph=p.doctor.phone;
+  el.innerHTML=`
+  <div class="urgent-box">
+    <p><strong>Если прямо сейчас есть мысли о самоповреждении или суициде</strong> — обратитесь за помощью немедленно: к врачу, в скорую психиатрическую помощь или по единому номеру.</p>
+    <div class="copyline" style="margin-top:8px"><span class="big-num">112</span><button class="btn small" type="button" data-copy="112">Скопировать</button></div>
+    ${dph?`<div class="copyline" style="margin-top:6px"><span>Мой врач${p.doctor.name?" ("+esc(p.doctor.name)+")":""}: <strong class="num" style="color:var(--ink)">${esc(dph)}</strong></span><button class="btn small" type="button" data-copy="${esc(dph)}">Скопировать</button></div>`:""}
+    <p class="hint" style="margin-top:8px">Наличие плана не заменяет обращения за реальной помощью в момент кризиса. Если есть прямая угроза жизни, попросите близкого побыть рядом.</p>
+  </div>
+  <div>
+    <h2>План безопасности</h2>
+    <p class="lede" style="margin-top:6px">Составляйте в стабильном состоянии, лучше вместе с врачом или психотерапевтом. Пункты идут в том порядке, в котором к ним обращаются, когда становится хуже.</p>
+  </div>
+  <div class="panel">
+    <div class="block"><h3>Лечащий врач</h3>
+      <div class="grid2"><div class="field"><label class="fl" for="dName">Имя</label><input id="dName" type="text" data-doc="name" value="${esc(p.doctor.name)}"></div>
+      <div class="field"><label class="fl" for="dPhone">Телефон</label><input id="dPhone" type="tel" data-doc="phone" value="${esc(p.doctor.phone)}"></div></div>
+    </div>
+    ${PLAN_STEPS.map(([k,t,h],i)=>`<div class="block plan-step"><span class="n">${i+1}</span><label class="fl" for="pl-${k}" style="font-weight:600">${t}</label>${h?`<span class="hint">${h}</span>`:"<span></span>"}<textarea id="pl-${k}" data-plan="${k}" rows="3">${esc(p.plan[k])}</textarea></div>`).join("")}
+  </div>
+  <div class="savebar"><span class="msg ${S.planDirty?"dirty":""}" id="planMsg">${S.planDirty?"Есть несохранённые изменения":"План сохранён"}</span><button class="btn primary" type="button" id="savePlan" ${S.ready?"":"disabled"}>Сохранить план</button></div>`;
+}
+
+/* ---------- data / doctor ---------- */
+function buildReport(n){
+  const E=S.entries,meds=S.settings.meds,end=todayKey(),keys=rangeKeys(n,end),st=statsFor(keys,E,meds);
+  const L=[];
+  L.push("ДНЕВНИК САМОНАБЛЮДЕНИЯ — СВОДКА ДЛЯ ВРАЧА");
+  L.push("Период: "+fmtFull(keys[0])+" — "+fmtFull(end)+" ("+n+" дн., записей: "+st.filled+")");
+  L.push("");
+  L.push("Настроение (1 — глубокая депрессия, 10 — выраженная мания): среднее "+f1(st.moodAvg)+", от "+f1(st.moodMin)+" до "+f1(st.moodMax));
+  L.push("Сон: в среднем "+f1(st.sleepAvg)+" ч; ночей меньше 6 ч: "+st.shortNights+(st.wakeSD!=null?"; разброс времени подъёма ±"+Math.round(st.wakeSD)+" мин":""));
+  L.push("Энергия "+f1(st.energy)+" · раздражительность "+f1(st.irrit)+" · тревога "+f1(st.anxiety)+" (средние, 1–10)");
+  L.push("Дней с заметной импульсивностью: "+st.impulsDays);
+  meds.forEach(m=>{let t=0,tot=0;keys.forEach(k=>{const e=E[k];if(e&&e.meds&&m in e.meds){tot++;if(e.meds[m])t++}});L.push("Приём «"+m+"»: отмечен "+t+" из "+tot+" дней с записью")});
+  const trig=Object.entries(st.trig).sort((a,b)=>b[1]-a[1]);
+  if(trig.length)L.push("Триггеры: "+trig.map(([t,c])=>t+" ×"+c).join(", "));
+  const al=analyze(E,end,meds);if(al.length){L.push("");L.push("СИГНАЛЫ ЗА ПОСЛЕДНИЕ ДНИ");al.forEach(a=>L.push("• "+a.t))}
+  const sh=keys.filter(k=>E[k]&&E[k].selfharm==="yes");if(sh.length){L.push("");L.push("Мысли о самоповреждении отмечены: "+sh.map(fmtShort).join(", "))}
+  const se=keys.filter(k=>E[k]&&E[k].sideEffects&&E[k].sideEffects.trim());
+  if(se.length){L.push("");L.push("ПОБОЧНЫЕ ЭФФЕКТЫ");se.forEach(k=>L.push(fmtShort(k)+": "+E[k].sideEffects.trim()))}
+  const ev=keys.filter(k=>E[k]&&E[k].events&&E[k].events.trim());
+  if(ev.length){L.push("");L.push("ЗНАЧИМЫЕ СОБЫТИЯ");ev.forEach(k=>L.push(fmtShort(k)+": "+E[k].events.trim()))}
+  const wk=Object.keys(S.weeks).filter(w=>w>=mondayKey(keys[0])).sort();
+  if(wk.length){L.push("");L.push("ЕЖЕНЕДЕЛЬНЫЕ ОБЗОРЫ");wk.forEach(w=>{const x=S.weeks[w];L.push("Неделя с "+fmtShort(w)+(x.earlyDoctor?" — просьба связаться раньше приёма":""));(x.answers||[]).forEach((a,i)=>{if(a&&a.trim())L.push("  "+WEEK_Q[i]+" — "+a.trim())})})}
+  L.push("");L.push("ПО ДНЯМ: дата | настр. утро/вечер | сон ч | энергия | раздраж. | тревога | препараты");
+  keys.forEach(k=>{const e=E[k];if(!e)return;const t=medsTaken(e,meds);L.push([fmtShort(k),(e.moodAM??"–")+"/"+(e.moodPM??"–"),f1(sleepH(e)),e.energy??"–",e.irrit??"–",e.anxiety??"–",t?t.taken+"/"+t.total:"–"].join(" | "))});
+  return L.join("\n");
+}
+/* ---------- PDF с графиками ---------- */
+function lineChartSVG(keys,E,series,title){
+  const W=720,L=34,R=10,top=26,h=110,H=top+h+26;
+  const n=keys.length,step=(W-L-R)/Math.max(n-1,1);
+  const x=i=>L+i*step,y=v=>top+(10-v)/9*h;
+  let g=`<text x="${L}" y="12" font-size="11" fill="var(--muted)">${esc(title)}</text>`;
+  for(const v of[1,4,7,10])g+=`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${L-8}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--muted)">${v}</text>`;
+  for(const s of series){
+    let d="",pen=false;
+    keys.forEach((k,i)=>{const e=E[k];const v=e&&typeof e[s.f]==="number"?e[s.f]:null;if(v==null){pen=false;return}d+=(pen?"L":"M")+x(i).toFixed(1)+" "+y(v).toFixed(1)+" ";pen=true});
+    if(d)g+=`<path d="${d}" fill="none" stroke="${s.c}" stroke-width="2" ${s.dash?`stroke-dasharray="${s.dash}"`:""} stroke-linejoin="round"/>`;
+    keys.forEach((k,i)=>{const e=E[k];if(e&&typeof e[s.f]==="number")g+=`<circle cx="${x(i)}" cy="${y(e[s.f])}" r="2.5" fill="${s.c}"/>`});
+  }
+  const every=Math.ceil(n/10);
+  keys.forEach((k,i)=>{if((n-1-i)%every===0)g+=`<text x="${x(i)}" y="${H-6}" text-anchor="${i===0?"start":i===n-1?"end":"middle"}" font-size="10.5" fill="var(--muted)">${fmtShort(k)}</text>`});
+  return `<svg viewBox="0 0 ${W} ${H}">${g}</svg>`;
+}
+function buildPdfHTML(n){
+  const E=S.entries,meds=S.settings.meds,end=todayKey(),keys=rangeKeys(n,end),st=statsFor(keys,E,meds);
+  const al=analyze(E,end,meds);
+  const trig=Object.entries(st.trig).sort((a,b)=>b[1]-a[1]);
+  const sh=keys.filter(k=>E[k]&&E[k].selfharm==="yes");
+  const se=keys.filter(k=>E[k]&&E[k].sideEffects&&E[k].sideEffects.trim());
+  const ev=keys.filter(k=>E[k]&&E[k].events&&E[k].events.trim());
+  const medAdh=meds.map(m=>{let t=0,tot=0;keys.forEach(k=>{const e=E[k];if(e&&e.meds&&m in e.meds){tot++;if(e.meds[m])t++}});return[m,t,tot]});
+  const tok=["--bg","--surface","--sunk","--ink","--ink-2","--muted","--line","--accent","--accent-soft","--dep","--mid","--man","--warn","--warn-soft","--caution","--caution-soft","--ok"];
+  // Для печати всегда светлая палитра, независимо от темы окна.
+  const light={"--bg":"#FFFFFF","--surface":"#FFFFFF","--sunk":"#E8ECEF","--ink":"#1C232D","--ink-2":"#465061","--muted":"#6A7383","--line":"#D9DEE4","--accent":"#2D5E63","--accent-soft":"#DDEBEA","--dep":"#4A6BA8","--mid":"#9AA7A8","--man":"#C58517","--warn":"#AE3737","--warn-soft":"#F7E6E5","--caution":"#9A6A12","--caution-soft":"#F6EDDA","--ok":"#357A4C"};
+  const rows=keys.filter(k=>E[k]).map(k=>{const e=E[k];const t=medsTaken(e,meds);const sl=sleepH(e);
+    const note=[(e.triggers||[]).join(", "),(e.signs||[]).length?"предвестники: "+e.signs.join(", "):"",e.selfharm==="yes"?"мысли о самоповреждении":""].filter(Boolean).join("; ");
+    return `<tr><td>${fmtShort(k)}</td><td>${e.moodAM??"–"} / ${e.moodPM??"–"}</td><td>${sl==null?"–":f1(sl)}</td><td>${e.sleepQ??"–"}</td><td>${e.energy??"–"}</td><td>${e.irrit??"–"}</td><td>${e.anxiety??"–"}</td><td>${["нет","немного","заметно","сильно"][e.impuls]||"–"}</td><td>${t?t.taken+"/"+t.total:"–"}</td><td class="note">${esc(note)}</td></tr>`}).join("");
+  return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Дневник самонаблюдения — ${fmtFull(keys[0])}–${fmtFull(end)}</title>
+${["onest/400","onest/500","onest/600","literata/500","literata/600"].map(f=>`<link rel="stylesheet" href="%FONTBASE%/${f}.css">`).join("")}
+<style>
+:root{${tok.map(t=>t+":"+light[t]).join(";")}}
+@page{size:A4;margin:14mm 12mm}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Onest","Segoe UI",sans-serif;font-size:10pt;color:var(--ink);background:#fff;line-height:1.45}
+h1{font-family:"Literata",Georgia,serif;font-weight:500;font-size:17pt;margin:0 0 2px}
+h2{font-family:"Literata",Georgia,serif;font-weight:500;font-size:12pt;margin:16px 0 6px}
+.sub{color:var(--muted);font-size:9pt}
+.num{font-variant-numeric:tabular-nums}
+.stats{display:grid;grid-template-columns:repeat(5,1fr);border:1px solid var(--line);border-radius:6px;margin-top:12px}
+.stat{padding:7px 9px;border-left:1px solid var(--line)}.stat:first-child{border-left:0}
+.stat .l{font-size:7.5pt;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+.stat .v{font-size:13pt;font-weight:600;font-variant-numeric:tabular-nums}
+.stat .s{font-size:8pt;color:var(--muted)}
+svg{display:block;width:100%;height:auto}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:8pt;color:var(--ink-2);margin-top:4px}
+.legend i{display:inline-block;width:12px;height:3px;vertical-align:middle;margin-right:5px;background:var(--ink)}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+ul{margin:0;padding-left:16px}li{margin-bottom:3px}
+.urgent{color:var(--warn);font-weight:600}
+table{width:100%;border-collapse:collapse;font-size:8.3pt;font-variant-numeric:tabular-nums}
+th,td{border-bottom:1px solid var(--line);padding:3px 5px;text-align:left;vertical-align:top}
+th{font-size:7.5pt;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-weight:600}
+td.note{color:var(--ink-2)}
+tr{break-inside:avoid}
+thead{display:table-header-group}h2{break-after:avoid}
+.foot{margin-top:14px;font-size:8pt;color:var(--muted)}
+.keep{break-inside:avoid}
+</style></head><body>
+<h1>Дневник самонаблюдения</h1>
+<div class="sub">Период: ${fmtFull(keys[0])} — ${fmtFull(end)} · ${n} дней, записей: ${st.filled} · сформировано ${new Date().toLocaleDateString("ru-RU")}</div>
+<div class="stats">
+  <div class="stat"><div class="l">Настроение</div><div class="v">${f1(st.moodAvg)}</div><div class="s">от ${f1(st.moodMin)} до ${f1(st.moodMax)}</div></div>
+  <div class="stat"><div class="l">Сон</div><div class="v">${f1(st.sleepAvg)} ч</div><div class="s">ночей &lt; 6 ч: ${st.shortNights}</div></div>
+  <div class="stat"><div class="l">Подъём</div><div class="v">${st.wakeSD==null?"—":"±"+Math.round(st.wakeSD)+" мин"}</div><div class="s">разброс времени</div></div>
+  <div class="stat"><div class="l">Препараты</div><div class="v">${st.adh==null?"—":Math.round(st.adh*100)+"%"}</div><div class="s">отмеченных приёмов</div></div>
+  <div class="stat"><div class="l">Импульсивность</div><div class="v">${st.impulsDays}</div><div class="s">дней «заметно» и выше</div></div>
+</div>
+<div class="keep">
+<h2>Настроение, энергия, сон и приём препаратов</h2>
+<div class="sub">Шкала настроения: 1 — глубокая депрессия, 10 — выраженная мания.</div>
+${chartSVG(keys,E,meds)}
+<div class="legend"><span><i></i>Настроение вечером</span><span><i style="background:none;border:1.5px solid var(--ink-2);width:8px;height:8px;border-radius:50%"></i>утром</span><span><i style="background:repeating-linear-gradient(90deg,var(--muted) 0 4px,transparent 4px 8px)"></i>Энергия</span><span><i style="background:var(--accent-soft);height:9px"></i>Середина шкалы (4–7)</span><span><i style="background:var(--man);height:7px"></i>Сон &lt; 6 ч</span><span><i style="background:var(--dep);height:7px"></i>Сон &gt; 10 ч</span><span><i style="background:var(--ok);height:7px"></i>Все препараты</span><span><i style="background:var(--man);height:7px"></i>Часть</span><span><i style="background:var(--warn);height:7px"></i>Пропуск</span></div>
+</div>
+<div class="keep">
+<h2>Раздражительность и тревога</h2>
+${lineChartSVG(keys,E,[{f:"irrit",c:"var(--man)"},{f:"anxiety",c:"var(--dep)",dash:"5 4"}],"Оценка 1–10")}
+<div class="legend"><span><i style="background:var(--man)"></i>Раздражительность</span><span><i style="background:repeating-linear-gradient(90deg,var(--dep) 0 5px,transparent 5px 9px)"></i>Тревога</span></div>
+</div>
+<div class="cols keep">
+  <div><h2>Приём препаратов</h2><ul>${medAdh.map(([m,t,tot])=>`<li>${esc(m)}: отмечен ${t} из ${tot} дней с записью</li>`).join("")||"<li>Список препаратов не задан</li>"}</ul>
+    <h2>Триггеры</h2><ul>${trig.map(([t,c])=>`<li>${esc(t)} — ${c}</li>`).join("")||"<li>Не отмечались</li>"}</ul></div>
+  <div><h2>Сигналы за последние дни</h2><ul>${al.map(a=>`<li class="${a.sev==="urgent"?"urgent":""}">${esc(a.t)}</li>`).join("")||"<li>Нет</li>"}</ul>
+    ${sh.length?`<p class="urgent">Мысли о самоповреждении отмечены: ${sh.map(fmtShort).join(", ")}</p>`:""}</div>
+</div>
+${se.length||ev.length?`<div class="cols">
+  <div><h2>Побочные эффекты</h2><ul>${se.map(k=>`<li><span class="num">${fmtShort(k)}</span>: ${esc(E[k].sideEffects.trim())}</li>`).join("")||"<li>Не записывались</li>"}</ul></div>
+  <div><h2>Значимые события</h2><ul>${ev.map(k=>`<li><span class="num">${fmtShort(k)}</span>: ${esc(E[k].events.trim())}</li>`).join("")||"<li>Не записывались</li>"}</ul></div>
+</div>`:""}
+<div>
+<h2>Записи по дням</h2>
+<table><thead><tr><th>Дата</th><th>Настр. у/в</th><th>Сон, ч</th><th>Кач.</th><th>Энерг.</th><th>Раздр.</th><th>Трев.</th><th>Импульс.</th><th>Препар.</th><th>Триггеры и отметки</th></tr></thead><tbody>${rows||`<tr><td colspan="10">Записей за период нет</td></tr>`}</tbody></table>
+</div>
+<p class="foot">Самонаблюдение пациента. Шкалы субъективные; документ не является медицинским заключением.</p>
+</body></html>`;
+}
+async function savePDF(n,btn){
+  if(!Object.keys(S.entries).length){toast("Пока нет записей для графиков");return}
+  if(btn)btn.disabled=true;
+  try{
+    if(IS_WEB)toast("В окне печати нажмите «Поделиться» → «Сохранить в Файлы», чтобы получить PDF");
+    const r=await window.diary.savePDF("dnevnik-grafiki-"+todayKey()+".pdf",buildPdfHTML(n));
+    if(r&&r.status==="saved")toast("PDF сохранён");
+  }catch(e){toast("Не получилось сохранить PDF: "+((e&&e.message)||"ошибка"))}
+  finally{if(btn)btn.disabled=false}
+}
+function buildCSV(){
+  const meds=S.settings.meds;
+  const cols=["Дата","Настроение утро","Настроение вечер","Отбой","Подъём","Сон ч","Качество сна","Энергия","Раздражительность","Тревога","Аппетит","Мышление","Импульсивность",...meds.map(m=>"Приём: "+m),"Активность мин","Алкоголь/вещества","Первый свет","Приёмов пищи","Триггеры","Предвестники","Мысли о самоповреждении","Побочные эффекты","События","Заметки"];
+  const q=v=>{v=v==null?"":String(v);return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+  const rows=[cols.map(q).join(";")];
+  Object.keys(S.entries).sort().forEach(k=>{const e=S.entries[k];
+    rows.push([fmtFull(k),e.moodAM,e.moodPM,e.bed,e.wake,sleepH(e)==null?"":String(sleepH(e)).replace(".",","),e.sleepQ,e.energy,e.irrit,e.anxiety,e.appetite,e.cognition,e.impuls,...meds.map(m=>e.meds&&m in e.meds?(e.meds[m]?"да":"нет"):""),e.activity,e.alcohol,e.daylight,e.meals,(e.triggers||[]).join(", "),(e.signs||[]).join(", "),e.selfharm==="yes"?"да":e.selfharm==="no"?"нет":"",e.sideEffects,e.events,[e.cogNote,e.note].filter(Boolean).join(" / ")].map(q).join(";"))});
+  return "﻿"+rows.join("\r\n");
+}
+function reminderHTML(){
+  if(IS_WEB)return `<div class="panel field" id="reminderPanel">
+    <span class="label">Вечернее напоминание на iPhone</span>
+    <p>Веб-приложение не может само напоминать по расписанию, поэтому поручим это iPhone:</p>
+    <ol class="steps">
+      <li>Откройте приложение <strong>«Напоминания»</strong> и создайте напоминание «Дневник».</li>
+      <li>Включите <strong>«Дата»</strong> и <strong>«Время»</strong>, например 21:00, и выберите <strong>«Повтор» → «Ежедневно»</strong>.</li>
+      <li>Когда придёт напоминание, откройте дневник с экрана «Домой».</li>
+    </ol>
+  </div>`;
+  const p=S.prefs;
+  if(!p)return "";
+  return `<div class="panel field" id="reminderPanel">
+    <span class="label">Вечернее напоминание</span>
+    <label class="med"><input type="checkbox" id="rmEnabled" ${p.enabled?"checked":""}><span>Напоминать о записи каждый день</span></label>
+    <div class="row">
+      <label class="fl" for="rmTime">Время</label>
+      <input type="time" id="rmTime" value="${esc(p.time)}" style="width:auto" ${p.enabled?"":"disabled"}>
+      <button class="btn small" type="button" id="rmTest" ${p.enabled?"":"disabled"}>Показать пробное напоминание</button>
+    </div>
+    <label class="med"><input type="checkbox" id="rmAuto" ${p.autostart?"checked":""} ${p.enabled&&p.canAutostart?"":"disabled"}><span>Запускать вместе с Windows — свёрнутым в трей, без окна</span></label>
+    <p class="hint">Напоминание приходит, только если запись за этот день ещё не сделана. Пока напоминание включено, крестик сворачивает окно в трей (значок у часов), и дневник продолжает ждать нужного времени. Чтобы полностью выйти, нажмите на значок в трее правой кнопкой мыши и выберите «Выйти».${p.canAutostart?"":" Автозапуск работает только в установленной программе."}</p>
+  </div>`;
+}
+async function loadPrefs(){try{S.prefs=await window.diary.getPrefs();if(S.prefs.theme)applyTheme(S.prefs.theme);renderData()}catch(e){}}
+function appearanceHTML(){
+  const cur=S.theme||"system";
+  return `<div class="panel field">
+    <span class="label">Оформление</span>
+    <div class="seg" role="group" aria-label="Тема">${[["light","Светлая"],["dark","Тёмная"],["system","Как в Windows"]].map(([v,l])=>`<button type="button" data-theme-set="${v}" aria-pressed="${cur===v}">${l}</button>`).join("")}</div>
+    <p class="hint">«Как в Windows» переключается вместе с системной темой. Графики в PDF всегда печатаются светлыми.</p>
+  </div>`;
+}
+async function setPrefs(patch,msg){
+  try{S.prefs=await window.diary.setPrefs(patch);renderData();if(msg)toast(msg(S.prefs))}
+  catch(e){toast("Не получилось сохранить настройки напоминания")}
+}
+function renderData(){
+  const el=$("view-data");const n=S.reportN||30;
+  el.innerHTML=`
+  <div><h2>Данные и настройки</h2><p class="lede" style="margin-top:6px">Приносите записи на приём — так динамику проще обсуждать предметно, а не по памяти.</p></div>
+  <div class="panel field">
+    <div class="block-head"><span class="label">Сводка к приёму</span><div class="seg">${[14,30,90].map(x=>`<button type="button" data-rep="${x}" aria-pressed="${n===x}">${x} дней</button>`).join("")}</div></div>
+    ${Object.keys(S.entries).length?`<pre class="report" id="reportText">${esc(buildReport(n))}</pre>
+    <div class="row"><button class="btn primary" type="button" data-pdf="${n}">Графики для врача (.pdf)</button><button class="btn" type="button" id="dlReport">Скачать сводку (.txt)</button><button class="btn" type="button" id="dlCSV">Скачать все записи (.csv)</button><button class="btn ghost" type="button" id="copyReport">Скопировать текст</button></div>
+    <p class="hint">CSV открывается в Excel и Google Таблицах.</p>`:`<p class="hint">Сводка появится после первых записей.</p>`}
+  </div>
+  ${reminderHTML()}
+  ${appearanceHTML()}
+  <div class="panel field">
+    <label class="label" for="medsList">Мои препараты</label>
+    <p class="hint">Одно название на строку — без доз. Эти пункты появятся отметками в ежедневной записи. Любые изменения схемы — только с лечащим врачом.</p>
+    <textarea id="medsList" rows="3">${esc(S.settings.meds.join("\n"))}</textarea>
+    <div class="row"><button class="btn" type="button" id="saveMeds" ${S.ready?"":"disabled"}>Сохранить список</button></div>
+  </div>
+  ${transferHTML()}`;
+}
+function transferHTML(){
+  const P=S.pendingImport;const here=IS_WEB?"на телефоне":"на компьютере";
+  return `<div class="panel field" id="transferPanel">
+    <span class="label">Перенос между компьютером и iPhone · резервная копия</span>
+    <ol class="steps">
+      <li><strong>Сохраните копию</strong> на одном устройстве. ${IS_WEB?"На iPhone выберите «Сохранить в Файлы» → iCloud Drive.":"На компьютере удобно сохранить её в папку iCloud Drive или отправить себе любым способом."}</li>
+      <li><strong>Добавьте записи из копии</strong> на другом устройстве. Совпадающие дни объединяются: остаётся та версия, которую меняли позже. Ничего не удаляется.</li>
+    </ol>
+    ${P?`<div class="urgent-box" style="background:var(--caution-soft);border-color:var(--caution)">
+      <p>Файл <strong style="color:var(--ink)">${esc(P.name||"копии")}</strong>${P.savedAt?" от "+esc(new Date(P.savedAt).toLocaleString("ru-RU",{day:"numeric",month:"long",hour:"2-digit",minute:"2-digit"})):""}${P.device?" ("+(P.device==="iphone"?"с iPhone":"с компьютера")+")":""}.</p>
+      <p style="margin-top:6px">При объединении: <strong style="color:var(--ink)">новых дней — ${P.plan.add}</strong>, обновится ${P.plan.upd}, останутся как ${here} — ${P.plan.keep}.</p>
+      <div class="row" style="margin-top:10px"><button class="btn primary" type="button" id="importMerge">Объединить</button><button class="btn" type="button" id="importCancel">Отмена</button><button class="btn ghost small" type="button" id="importReplace">Заменить всё копией</button></div>
+      ${P.confirmReplace?`<p style="margin-top:8px"><strong>Точно заменить?</strong> Все записи ${here} (${Object.keys(S.entries).length} дн.) будут стёрты и заменены копией. <button class="btn small" type="button" id="importReplaceYes">Да, заменить</button></p>`:""}
+    </div>`:""}
+    <div class="row"><button class="btn primary" type="button" id="exportBackup" ${S.ready?"":"disabled"}>Сохранить копию</button><button class="btn" type="button" id="importBackup" ${S.ready?"":"disabled"}>Добавить записи из копии…</button>${IS_WEB?"":`<button class="btn ghost" type="button" id="openFolder">Открыть папку с данными</button>`}</div>
+    <p class="hint">${IS_WEB?"Записи хранятся только в этом телефоне. Если удалить значок дневника с экрана «Домой», записи пропадут — поэтому время от времени сохраняйте копию.":"Записи хранятся в одном файле на этом компьютере. Время от времени сохраняйте копию на флешку или в облако."}</p>
+  </div>`;
+}
+// Объединение: по каждому документу остаётся версия с более поздним updatedAt.
+function mergePlan(cur,inc){
+  const out=Object.assign({},cur);let add=0,upd=0,keep=0;
+  for(const[id,d]of Object.entries(inc||{})){
+    if(!d||typeof d!=="object"||!/^[\w.-]{1,64}$/.test(id))continue;
+    const c=cur[id];const isDay=id.startsWith("d-");
+    if(!c){out[id]=d;if(isDay)add++}
+    else if((d.updatedAt||0)>(c.updatedAt||0)){out[id]=d;if(isDay)upd++}
+    else if(isDay)keep++;
+  }
+  return{out,add,upd,keep};
+}
+async function offerFile(filename,data){
+  try{const r=await window.diary.saveFile(filename,data);if(r&&r.status==="saved")toast("Файл сохранён")}
+  catch(e){toast("Не получилось сохранить файл: "+((e&&e.message)||"ошибка"))}
+}
+async function importBackup(){
+  let txt;try{txt=await window.diary.openJSON()}catch(e){toast("Не получилось открыть файл");return}
+  if(!txt)return;
+  let o;try{o=JSON.parse(txt)}catch(e){toast("Это не файл резервной копии дневника");return}
+  if(!o||typeof o!=="object"||Array.isArray(o)||o.app!=="dnevnik-bar"||!o.data){toast("Это не файл резервной копии дневника");return}
+  const cur=await window.diary.getAll();
+  S.pendingImport={data:o.data,savedAt:o.savedAt,device:o.device,name:o.fileName,plan:mergePlan(cur||{},o.data)};
+  renderData();
+  const p=$("transferPanel");if(p)p.scrollIntoView({behavior:"smooth",block:"center"});
+}
+async function applyImport(replace){
+  const P=S.pendingImport;if(!P)return;
+  try{
+    const next=replace?P.data:mergePlan(await window.diary.getAll()||{},P.data).out;
+    await window.diary.replaceAll(next);
+    const msg=replace?"Записи заменены копией":"Добавлено новых дней: "+P.plan.add+", обновлено: "+P.plan.upd;
+    S.pendingImport=null;await reloadStore();toast(msg);
+  }catch(e){saveErr(e)}
+}
+
+/* ---------- render / events ---------- */
+function renderAll(){
+  if(S.tab==="today"||!$("view-today").innerHTML){if(!S.dirty)renderToday();else refreshDerived()}
+  renderTrends();
+  renderCalendar();
+  if(!S.weekDirty)renderWeek();
+  if(!S.planDirty)renderPlan();
+  renderData();
+}
+function setTab(t){
+  S.tab=t;
+  document.querySelectorAll("nav.tabs button").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===t)));
+  ["today","calendar","trends","week","plan","data"].forEach(v=>$("view-"+v).hidden=v!==t);
+  if(t==="today"&&!S.dirty)renderToday();
+  if(t==="trends")renderTrends();
+  if(t==="calendar"){S.calSel=S.date;S.calMonth=monthStart(S.date);renderCalendar()}
+  if(t==="week"&&!S.weekDirty)renderWeek();
+  if(t==="data")renderData();
+  try{localStorage.setItem("bar-diary-tab",t)}catch(e){}
+  window.scrollTo({top:0});
+}
+async function copyText(txt,fallbackEl){
+  try{await window.diary.copy(txt);toast("Скопировано")}
+  catch(e){if(fallbackEl){const r=document.createRange();r.selectNodeContents(fallbackEl);const s=getSelection();s.removeAllRanges();s.addRange(r)}toast("Выделите и скопируйте вручную")}
+}
+/* ---------- тема ---------- */
+const SUN='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+const MOON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>';
+const darkMQ=window.matchMedia("(prefers-color-scheme: dark)");
+function effectiveDark(){const t=S.theme||"system";return t==="dark"||(t==="system"&&darkMQ.matches)}
+function applyTheme(t){
+  if(!["system","light","dark"].includes(t))t="system";
+  S.theme=t;
+  if(t==="system")document.documentElement.removeAttribute("data-theme");else document.documentElement.setAttribute("data-theme",t);
+  const b=$("themeToggle");const dark=effectiveDark();
+  b.innerHTML=(dark?SUN:MOON)+"<span>"+(dark?"Светлая тема":"Тёмная тема")+"</span>";
+  b.title=dark?"Включить светлую тему":"Включить тёмную тему";
+}
+function setTheme(t){
+  applyTheme(t);
+  try{localStorage.setItem("bar-diary-theme",t)}catch(e){}
+  if(window.diary&&window.diary.setPrefs)window.diary.setPrefs({theme:t}).then(p=>{S.prefs=p;renderData()}).catch(()=>{});
+  else renderData();
+}
+darkMQ.addEventListener("change",()=>applyTheme(S.theme));
+
+document.addEventListener("click",async ev=>{
+  const b=ev.target.closest("button");if(!b)return;
+  if(b.dataset.tab){setTab(b.dataset.tab);return}
+  if(b.classList.contains("sv")){const f=b.dataset.f,v=+b.dataset.v;S.form[f]=S.form[f]===v?null:v;b.parentElement.querySelectorAll(".sv").forEach(x=>x.setAttribute("aria-pressed",String(S.form[f]===+x.dataset.v)));markDirty();return}
+  if(b.dataset.opt!=null&&b.dataset.f){const f=b.dataset.f;let v=b.dataset.opt;if(f==="impuls")v=+v;S.form[f]=S.form[f]===v?null:v;b.parentElement.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",String(String(S.form[f])===x.dataset.opt)));markDirty();return}
+  if(b.dataset.chip!=null){const f=b.dataset.f,c=b.dataset.chip;const a=S.form[f]=(S.form[f]||[]).slice();const i=a.indexOf(c);if(i<0)a.push(c);else a.splice(i,1);b.setAttribute("aria-pressed",String(i<0));markDirty();return}
+  if(b.dataset.daynav){goDate(addDays(S.date,+b.dataset.daynav));return}
+  if(b.dataset.goday){goDate(b.dataset.goday);return}
+  if(b.dataset.calday){S.calSel=b.dataset.calday;renderCalendar();return}
+  if(b.dataset.calnav!=null){const n=+b.dataset.calnav;S.calMonth=n===0?monthStart(todayKey()):addMonths(S.calMonth,n);renderCalendar();return}
+  if(b.dataset.openday){if(goDate(b.dataset.openday))setTab("today");return}
+  if(b.id==="saveDay"){
+    const data=Object.assign({},S.form,{date:S.date});
+    b.disabled=true;try{await save("d-"+S.date,data);S.entries[S.date]=Object.assign(data,{updatedAt:Date.now()});S.dirty=false;refreshDerived();toast("Запись сохранена");{const ds=document.querySelector(".daystrip");if(ds)ds.outerHTML=dayStripHTML()}if(S.form.selfharm!=="yes"){const al=analyze(S.entries,todayKey(),S.settings.meds);if(al.some(a=>a.sev!=="watch")){renderToday();window.scrollTo({top:0})}}}catch(e){saveErr(e)}finally{b.disabled=!S.ready}
+    return}
+  if(b.id==="demoOn"){S.demo=true;S.demoEntries=makeDemo();renderTrends();renderWeek();renderCalendar();return}
+  if(b.id==="demoOff"){S.demo=false;S.demoEntries=null;renderTrends();renderWeek();renderCalendar();return}
+  if(b.dataset.range){S.range=+b.dataset.range;renderTrends();return}
+  if(b.dataset.weeknav){if(S.weekDirty&&!b._w){b._w=1;toast("Обзор не сохранён. Нажмите ещё раз, чтобы перейти без сохранения.");return}S.weekStart=addDays(S.weekStart,+b.dataset.weeknav);loadWeekForm();renderWeek();return}
+  if(b.id==="saveWeek"){b.disabled=true;try{await save("w-"+S.weekStart,S.weekForm);S.weeks[S.weekStart]=clone(S.weekForm);S.weekDirty=false;renderWeek();toast("Обзор сохранён")}catch(e){saveErr(e);b.disabled=false}return}
+  if(b.id==="savePlan"){b.disabled=true;const st=Object.assign(clone(S.settings),{plan:S.planForm.plan,doctor:S.planForm.doctor});try{await save("settings",st);S.settings=st;S.planDirty=false;renderPlan();if(!S.dirty)renderToday();toast("План сохранён")}catch(e){saveErr(e);b.disabled=false}return}
+  if(b.dataset.copy){copyText(b.dataset.copy,b.previousElementSibling);return}
+  if(b.dataset.rep){S.reportN=+b.dataset.rep;renderData();return}
+  if(b.id==="copyReport"){copyText(buildReport(S.reportN||30),$("reportText"));return}
+  if(b.id==="dlReport"){offerFile("svodka-dlya-vracha-"+todayKey()+".txt",buildReport(S.reportN||30));return}
+  if(b.dataset.pdf){savePDF(+b.dataset.pdf,b);return}
+  if(b.id==="dlCSV"){offerFile("dnevnik-"+todayKey()+".csv",buildCSV());return}
+  if(b.id==="themeToggle"){setTheme(effectiveDark()?"light":"dark");return}
+  if(b.dataset.themeSet){setTheme(b.dataset.themeSet);return}
+  if(b.id==="exportBackup"){const all=await window.diary.getAll();const name="dnevnik-kopiya-"+DEVICE+"-"+todayKey()+".json";offerFile(name,JSON.stringify({app:"dnevnik-bar",version:1,device:DEVICE,fileName:name,savedAt:new Date().toISOString(),data:all},null,1));return}
+  if(b.id==="importBackup"){importBackup();return}
+  if(b.id==="importCancel"){S.pendingImport=null;renderData();return}
+  if(b.id==="importMerge"){applyImport(false);return}
+  if(b.id==="importReplace"){if(S.pendingImport){S.pendingImport.confirmReplace=true;renderData()}return}
+  if(b.id==="importReplaceYes"){applyImport(true);return}
+  if(b.id==="openFolder"){window.diary.openDataFolder();return}
+  if(b.id==="rmTest"){window.diary.testReminder().then(ok=>{if(!ok)toast("Уведомления Windows недоступны — окно будет мигать на панели задач")});return}
+  if(b.id==="saveMeds"){const meds=[...new Set(lines($("medsList").value))];const st=Object.assign(clone(S.settings),{meds});b.disabled=true;try{await save("settings",st);S.settings=st;if(!S.dirty)renderToday();renderData();toast("Список сохранён")}catch(e){saveErr(e);b.disabled=false}return}
+});
+document.addEventListener("input",ev=>{
+  const t=ev.target;
+  if(t.dataset.in){const f=t.dataset.in;let v=t.value;if(t.type==="number")v=v===""?null:Math.max(0,+v);S.form[f]=v;markDirty();return}
+  if(t.dataset.med!=null){S.form.meds=Object.assign({},S.form.meds||{});S.settings.meds.forEach(m=>{if(!(m in S.form.meds))S.form.meds[m]=false});S.form.meds[t.dataset.med]=t.checked;markDirty();return}
+  if(t.dataset.wq!=null){const a=S.weekForm.answers=(S.weekForm.answers||WEEK_Q.map(()=>"")).slice();a[+t.dataset.wq]=t.value;S.weekDirty=true;const m=$("weekMsg");m.textContent="Есть несохранённые изменения";m.className="msg dirty";return}
+  if(t.id==="wEarly"){S.weekForm.earlyDoctor=t.checked;S.weekDirty=true;const m=$("weekMsg");m.textContent="Есть несохранённые изменения";m.className="msg dirty";return}
+  if(t.dataset.plan){S.planForm.plan[t.dataset.plan]=t.value;S.planDirty=true;const m=$("planMsg");m.textContent="Есть несохранённые изменения";m.className="msg dirty";return}
+  if(t.dataset.doc){S.planForm.doctor[t.dataset.doc]=t.value;S.planDirty=true;const m=$("planMsg");m.textContent="Есть несохранённые изменения";m.className="msg dirty";return}
+});
+// Alt+← / Alt+→ — предыдущий / следующий день на вкладке «Сегодня».
+document.addEventListener("keydown",ev=>{
+  if(!ev.altKey||S.tab!=="today")return;
+  if(ev.key==="ArrowLeft"){ev.preventDefault();goDate(addDays(S.date,-1))}
+  if(ev.key==="ArrowRight"){ev.preventDefault();goDate(addDays(S.date,1))}
+});
+document.addEventListener("change",ev=>{
+  const t=ev.target;
+  if(t.id==="datePick"&&t.value){goDate(t.value);return}
+  if(t.id==="rmEnabled"){setPrefs({enabled:t.checked},p=>p.enabled?"Напоминание включено на "+p.time:"Напоминание выключено");return}
+  if(t.id==="rmTime"&&t.value){setPrefs({time:t.value},p=>"Напомню в "+p.time);return}
+  if(t.id==="rmAuto"){setPrefs({autostart:t.checked},p=>p.autostart?"Дневник будет запускаться вместе с Windows":"Автозапуск выключен");return}
+});
+window.addEventListener("beforeunload",e=>{if(S.dirty||S.weekDirty||S.planDirty){e.preventDefault();e.returnValue=""}});
+
+/* ---------- boot ---------- */
+loadForm();loadWeekForm();
+let startTab="today";try{const t=localStorage.getItem("bar-diary-tab");if(t&&$("view-"+t))startTab=t}catch(e){}
+try{applyTheme(localStorage.getItem("bar-diary-theme")||"system")}catch(e){applyTheme("system")}
+renderAll();setTab(startTab);
+initStore();
+if(window.diary&&window.diary.getPrefs)loadPrefs();
+})();
+</script>
+
+</body>
+</html>
