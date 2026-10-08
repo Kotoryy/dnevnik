@@ -183,6 +183,35 @@ textarea{resize:vertical;min-height:64px}
 .steps{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:6px;color:var(--ink-2)}
 .steps strong{color:var(--ink)}
 
+/* quick entry, summary, events, quiz, what's new */
+.quick{border-color:color-mix(in oklab,var(--accent) 45%,var(--line))}
+.stepper{display:flex;align-items:center;gap:10px}
+.step-val{font-size:1.3rem;font-weight:600;min-width:72px;text-align:center}
+.fullform>summary{cursor:pointer;display:flex;gap:6px 12px;align-items:baseline;flex-wrap:wrap;padding:12px 16px;border:1px solid var(--line);border-radius:12px;background:var(--surface);list-style:none}
+.fullform>summary::-webkit-details-marker{display:none}
+.fullform>summary::before{content:"▸";color:var(--accent);transition:transform .15s}
+.fullform[open]>summary::before{transform:rotate(90deg)}
+.fullform[open]>summary{margin-bottom:12px}
+.fs-title{font-family:var(--display);font-size:1.08rem;font-weight:500}
+.sum-list{margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:6px;color:var(--ink-2);max-width:75ch}
+.ev-form{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ev-form #evDate{width:auto}
+.ev-form #evText{flex:1 1 220px;width:auto}
+.ev-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.ev-list li{display:grid;grid-template-columns:auto auto 1fr auto;gap:10px;align-items:center;font-size:.9rem}
+.ev-text{min-width:0;overflow-wrap:anywhere}
+.ev-badge{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--accent);color:var(--surface);font-size:.72rem;font-weight:700;line-height:1}
+.ev-badge.small{width:15px;height:15px;font-size:.6rem;vertical-align:1px}
+.ev-line{font-size:.9rem;margin:0}
+.quiz-card{border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:8px;background:var(--bg);align-items:flex-start}
+.quiz-card .block-head{width:100%}
+.pill.due{font-size:.72rem;padding:2px 9px;border-radius:999px;background:var(--caution-soft);color:var(--caution);font-weight:600;white-space:nowrap}
+.quiz-form{display:flex;flex-direction:column;gap:16px;border-top:1px solid var(--line);padding-top:16px}
+.quiz-item{display:flex;flex-direction:column;gap:7px}
+.whatsnew{border-color:var(--accent);background:var(--accent-soft)}
+.ver{display:block;margin-top:8px}
+.linkbtn{background:none;border:0;padding:0;color:var(--accent);cursor:pointer;text-decoration:underline;font:inherit}
+
 /* main chart */
 .chip .sw{display:inline-block;width:14px;margin-right:7px;vertical-align:middle}
 .chip[aria-pressed="false"]{opacity:.75}
@@ -286,6 +315,7 @@ body{margin:0;-webkit-font-smoothing:antialiased}
 
   <footer class="note">
     Инструмент самонаблюдения и подготовки к приёму. Он не ставит диагноз и не даёт рекомендаций по дозам или схеме лечения — это решается только с лечащим психиатром. Пороги сигналов общие; их стоит обсудить с врачом. Если сейчас есть мысли о самоповреждении или суициде — звоните 112.
+    <span class="ver">Версия <span id="appVer" class="num"></span> · <button type="button" class="linkbtn" id="showWhatsNew">Что нового</button></span>
   </footer>
 </div>
 <div class="toast" id="toast" hidden></div>
@@ -317,7 +347,7 @@ const DEFAULT_SETTINGS={meds:[],doctor:{name:"",phone:""},plan:{signs:"",coping:
 
 /* ---------- state ---------- */
 const S={
-  entries:{}, weeks:{}, settings:clone(DEFAULT_SETTINGS),
+  entries:{}, weeks:{}, events:{}, quiz:{}, settings:clone(DEFAULT_SETTINGS),
   store:null, ready:false, tab:"today",
   date:todayKey(), form:{}, dirty:false,
   weekStart:mondayKey(todayKey()), weekForm:{}, weekDirty:false,
@@ -338,7 +368,8 @@ function fmtLong(k){return parseKey(k).toLocaleDateString("ru-RU",{weekday:"long
 function fmtShort(k){const d=parseKey(k);return pad(d.getDate())+"."+pad(d.getMonth()+1)}
 function fmtFull(k){const d=parseKey(k);return pad(d.getDate())+"."+pad(d.getMonth()+1)+"."+d.getFullYear()}
 function mins(t){if(!t)return null;const[h,m]=t.split(":").map(Number);return h*60+m}
-function sleepH(e){if(!e||!e.bed||!e.wake)return null;let m=mins(e.wake)-mins(e.bed);if(m<=0)m+=1440;return Math.round(m/6)/10}
+// Сон: по времени отбоя и подъёма, а если их нет — по числу часов из быстрой записи.
+function sleepH(e){if(!e)return null;if(e.bed&&e.wake){let m=mins(e.wake)-mins(e.bed);if(m<=0)m+=1440;return Math.round(m/6)/10}return typeof e.sleepHours==="number"?e.sleepHours:null}
 function moodOf(e){if(!e)return null;const a=[e.moodAM,e.moodPM].filter(v=>typeof v==="number");return a.length?a.reduce((x,y)=>x+y,0)/a.length:null}
 function avg(a){const b=a.filter(v=>typeof v==="number"&&!isNaN(v));return b.length?b.reduce((x,y)=>x+y,0)/b.length:null}
 function f1(v){return v==null?"—":(Math.round(v*10)/10).toLocaleString("ru-RU")}
@@ -356,14 +387,16 @@ function entriesView(){return S.demo?S.demoEntries:S.entries}
 /* ---------- storage (файл на компьютере через window.diary) ---------- */
 
 function ingest(pairs){
-  const entries={},weeks={};let settings=null;
+  const entries={},weeks={},events={},quiz={};let settings=null;
   for(const[id,data]of pairs){
     if(!data)continue;
     if(id.startsWith("d-"))entries[id.slice(2)]=data;
     else if(id.startsWith("w-"))weeks[id.slice(2)]=data;
+    else if(id.startsWith("e-")){if(!data.deleted)events[id]=data}
+    else if(id.startsWith("q-"))quiz[id]=data;
     else if(id==="settings")settings=data;
   }
-  S.entries=entries;S.weeks=weeks;
+  S.entries=entries;S.weeks=weeks;S.events=events;S.quiz=quiz;
   S.settings=Object.assign(clone(DEFAULT_SETTINGS),settings||{});
   S.settings.plan=Object.assign(clone(DEFAULT_SETTINGS.plan),(settings&&settings.plan)||{});
   S.settings.doctor=Object.assign({name:"",phone:""},(settings&&settings.doctor)||{});
@@ -425,6 +458,7 @@ function analyze(E,ref,meds){
   const se=l3.find(([k,e])=>e&&e.sideEffects&&e.sideEffects.trim());
   if(se)out.push({sev:"watch",t:"Записаны побочные эффекты",d:"Новые или усилившиеся побочные эффекты — повод сообщить врачу. Не отменяйте препарат самостоятельно."});
   if(!S.demo&&Object.keys(E).length&&!l3.some(([k,e])=>e))out.push({sev:"watch",t:"Нет записей три дня",d:"Короткая запись лучше пропуска: хватит настроения и сна."});
+  if(!S.demo&&E===S.entries)out.push(...quizAlerts());
   const order={urgent:0,doctor:1,watch:2};
   return out.sort((a,b)=>order[a.sev]-order[b.sev]);
 }
@@ -462,8 +496,11 @@ function renderToday(){
     <button class="btn small ghost" type="button" data-tab="calendar">Календарь</button>
   </div>
   ${dayStripHTML()}
-  <p class="lede">Заполняйте в одно и то же время, например вечером перед сном. Можно отметить только настроение и сон — остальное по возможности.</p>
+  ${whatsNewHTML()}
+  ${quickHTML()}
 
+  <details class="fullform" id="fullForm" ${fullOpen()?"open":""}>
+  <summary><span class="fs-title">Подробная запись</span><span class="hint">время сна, энергия, тревога, мышление, триггеры, заметки</span></summary>
   <div class="panel">
     <div class="block">
       <div class="block-head"><h3>Настроение</h3><span class="hint">1 — глубокая депрессия, 10 — выраженная мания</span></div>
@@ -505,7 +542,7 @@ function renderToday(){
 
     <div class="block">
       <div class="block-head"><h3>Препараты</h3><button type="button" class="btn ghost small" data-tab="data">Изменить список</button></div>
-      <div class="meds">${meds.length?meds.map(m=>`<label class="med"><input type="checkbox" data-med="${esc(m)}" ${f.meds&&f.meds[m]?"checked":""}> <span>${esc(m)} — принят(а) по схеме</span></label>`).join(""):`<p class="hint">Список препаратов пуст. Добавьте названия во вкладке «Для врача».</p>`}</div>
+      <p class="hint">Отметки о приёме — в быстрой записи выше.</p>
       <div class="field"><label class="fl" for="f-sideEffects">Побочные эффекты</label>${ta("sideEffects","Если были — что и когда")}</div>
     </div>
 
@@ -524,17 +561,12 @@ function renderToday(){
     </div>
 
     <div class="block">
-      <h3>Безопасность</h3>
-      <div class="field"><span class="fl">Были ли мысли о самоповреждении или смерти?</span>${seg("selfharm",[["no","нет"],["yes","да"]])}</div>
-      <div id="shBox"></div>
-    </div>
-
-    <div class="block">
       <h3>День</h3>
       <div class="field"><label class="fl" for="f-events">Значимые события</label>${ta("events","Что произошло, что порадовало или выбило из колеи")}</div>
       <div class="field"><label class="fl" for="f-note">Заметки</label>${ta("note","Свободная запись")}</div>
     </div>
   </div>
+  </details>
 
   <div class="savebar">
     <span class="msg" id="saveMsg"></span>
@@ -542,11 +574,44 @@ function renderToday(){
   </div>`;
   refreshDerived();
 }
+/* ---------- быстрая запись ---------- */
+function fullOpen(){if(S.fullOpen==null){try{S.fullOpen=localStorage.getItem("bar-diary-full")==="1"}catch(e){S.fullOpen=false}}return S.fullOpen}
+function quickPart(){if(!S.qPart)S.qPart=new Date().getHours()<15?"AM":"PM";return S.qPart}
+function quickHTML(){
+  const f=S.form,meds=S.settings.meds,part=quickPart(),fld="mood"+part;
+  const byTime=!!(f.bed&&f.wake);const sl=sleepH(f);
+  return `<div class="panel quick">
+    <div class="block-head"><h3>Быстрая запись</h3><span class="hint">полминуты: настроение, сон, препараты</span></div>
+    <div class="field">
+      <div class="row" style="justify-content:space-between"><span class="fl">Настроение ${part==="AM"?"утром":"вечером"}</span>
+        <div class="seg" role="group" aria-label="Время оценки"><button type="button" data-qpart="AM" aria-pressed="${part==="AM"}">утро</button><button type="button" data-qpart="PM" aria-pressed="${part==="PM"}">вечер</button></div></div>
+      ${scale(fld,10,"mood",["депрессия","мания","ровно"])}
+    </div>
+    <div class="grid2">
+      <div class="field"><span class="fl">Сколько спали прошлой ночью</span>
+        <div class="stepper"><button type="button" class="iconbtn" data-sleepstep="-0.5" ${byTime?"disabled":""} aria-label="Меньше на полчаса">−</button>
+          <span class="num step-val" id="qSleep">${sl==null?"—":f1(sl)+" ч"}</span>
+          <button type="button" class="iconbtn" data-sleepstep="0.5" ${byTime?"disabled":""} aria-label="Больше на полчаса">+</button></div>
+        <span class="hint" id="qSleepHint">${byTime?"Посчитано по времени отбоя и подъёма из подробной записи.":"Шаг — полчаса. Точное время отбоя и подъёма можно указать в подробной записи."}</span></div>
+      <div class="field"><span class="fl">Препараты по схеме</span>
+        ${meds.length?`<div class="meds">${meds.map(m=>`<label class="med"><input type="checkbox" data-med="${esc(m)}" ${f.meds&&f.meds[m]?"checked":""}> <span>${esc(m)} — принят(а)</span></label>`).join("")}</div>`:`<p class="hint">Список препаратов пуст. Добавьте названия на вкладке «Данные».</p>`}</div>
+    </div>
+    <div class="field"><span class="fl">Были ли мысли о самоповреждении или смерти?</span>${seg("selfharm",[["no","нет"],["yes","да"]])}<div class="shBox"></div></div>
+  </div>`;
+}
+function syncField(f){
+  // Одно поле может быть и в быстрой, и в подробной записи — обновляем все копии.
+  document.querySelectorAll(`.sv[data-f="${f}"]`).forEach(x=>x.setAttribute("aria-pressed",String(S.form[f]===+x.dataset.v)));
+  document.querySelectorAll(`[data-f="${f}"][data-opt]`).forEach(x=>x.setAttribute("aria-pressed",String(String(S.form[f])===x.dataset.opt)));
+}
 function refreshDerived(){
   const s=sleepH(S.form);const d=$("sleepDerived");
   if(d)d.innerHTML=s!=null?`Сон: <strong class="num">${f1(s)} ч</strong>${s<6?" — мало":""}`:"";
-  const box=$("shBox");
-  if(box)box.innerHTML=S.form.selfharm==="yes"?`<div class="urgent-box"><p><strong>Пожалуйста, не оставайтесь с этим одни.</strong> Позвоните лечащему врачу, в скорую психиатрическую помощь или по номеру <strong>112</strong>. Во вкладке «План» — ваши контакты и шаги.</p><div class="row" style="margin-top:10px"><button type="button" class="btn small" data-tab="plan">Открыть мой план</button></div></div>`:"";
+  const q=$("qSleep");if(q)q.textContent=s==null?"—":f1(s)+" ч";
+  const byTime=!!(S.form.bed&&S.form.wake);
+  document.querySelectorAll("[data-sleepstep]").forEach(b=>b.disabled=byTime);
+  const qh=$("qSleepHint");if(qh)qh.textContent=byTime?"Посчитано по времени отбоя и подъёма из подробной записи.":"Шаг — полчаса. Точное время отбоя и подъёма можно указать в подробной записи.";
+  document.querySelectorAll(".shBox").forEach(box=>box.innerHTML=S.form.selfharm==="yes"?`<div class="urgent-box" style="margin-top:8px"><p><strong>Пожалуйста, не оставайтесь с этим одни.</strong> Позвоните лечащему врачу, в скорую психиатрическую помощь или по номеру <strong>112</strong>. Во вкладке «План» — ваши контакты и шаги.</p><div class="row" style="margin-top:10px"><button type="button" class="btn small" data-tab="plan">Открыть мой план</button></div></div>`:"");
   const m=$("saveMsg");
   if(m){
     const saved=S.entries[S.date];
@@ -579,9 +644,10 @@ function dayMarks(e,meds){
   return out;
 }
 function dayTitle(k,e,meds){
-  if(!e)return fmtLong(k)+" — нет записи";
+  const evs=eventsOn(k).map(x=>(EVENT_TYPES[x.type]||"событие")+(x.text?": "+x.text:""));
+  if(!e)return fmtLong(k)+" — нет записи"+(evs.length?" · "+evs.join(" · "):"");
   const t=medsTaken(e,meds),s=sleepH(e);
-  return [fmtLong(k),"настроение "+(e.moodAM??"–")+" / "+(e.moodPM??"–"),"сон "+(s==null?"–":f1(s)+" ч"),t?"препараты "+t.taken+"/"+t.total:""].concat(dayMarks(e,meds).map(x=>x[1].toLowerCase())).filter(Boolean).join(" · ");
+  return [fmtLong(k),"настроение "+(e.moodAM??"–")+" / "+(e.moodPM??"–"),"сон "+(s==null?"–":f1(s)+" ч"),t?"препараты "+t.taken+"/"+t.total:""].concat(dayMarks(e,meds).map(x=>x[1].toLowerCase())).concat(evs).filter(Boolean).join(" · ");
 }
 function moodFill(m){return m==null?"var(--accent-soft)":`color-mix(in oklab,${moodColor(m)} 60%,var(--surface))`}
 function marksHTML(e,meds){return `<span class="marks">${dayMarks(e,meds).map(([c])=>`<i class="mk ${c}"></i>`).join("")}</span>`}
@@ -593,6 +659,179 @@ function dayStripHTML(){
       <span class="wd">${d.toLocaleDateString("ru-RU",{weekday:"short"})}</span>
       <span class="dn num" style="background:${e?moodFill(m):"transparent"}">${d.getDate()}</span>
       ${marksHTML(e,meds)}</button>`}).join("")}</div>`;
+}
+
+/* ---------- итог последней недели словами ---------- */
+function weekSummary(E,meds,ref){
+  const last=rangeKeys(7,ref),base=rangeKeys(28,addDays(ref,-7));
+  const L=last.filter(k=>E[k]),B=base.filter(k=>E[k]);
+  if(!L.length)return["За последние 7 дней записей нет. Даже короткая запись — настроение, сон и препараты — помогает увидеть, как идут дела."];
+  const out=[];const hasBase=B.length>=5;const baseTxt="обычно — ";
+  out.push(`Записи есть за ${L.length} из 7 последних дней.`);
+  const moods=L.map(k=>dayMood(E[k])).filter(v=>v!=null);
+  if(moods.length){
+    const mL=avg(moods),mB=hasBase?avg(B.map(k=>dayMood(E[k]))):null;
+    let s=`Настроение в среднем ${f1(mL)} из 10`;
+    if(mB!=null){const d=mL-mB;s+=Math.abs(d)<0.7?`, примерно как обычно (${baseTxt}${f1(mB)}).`:d>0?`, выше обычного (${baseTxt}${f1(mB)}).`:`, ниже обычного (${baseTxt}${f1(mB)}).`}
+    else s+=mL>=7?", выше середины шкалы.":mL<=4?", ниже середины шкалы.":", в середине шкалы.";
+    const mx=Math.max(...moods),mn=Math.min(...moods);
+    if(mx-mn>=4)s+=` Были заметные перепады: от ${mn} до ${mx}.`;
+    const lastThree=L.slice(-3).map(k=>dayMood(E[k])).filter(v=>v!=null);
+    if(lastThree.length===3){if(lastThree[0]<lastThree[1]&&lastThree[1]<lastThree[2])s+=" Последние три записи — рост.";else if(lastThree[0]>lastThree[1]&&lastThree[1]>lastThree[2])s+=" Последние три записи — снижение."}
+    out.push(s);
+  }
+  const sl=L.map(k=>[k,sleepH(E[k])]).filter(x=>x[1]!=null);
+  if(sl.length){
+    const sL=avg(sl.map(x=>x[1])),sB=hasBase?avg(B.map(k=>sleepH(E[k]))):null;
+    let s=`Сон в среднем ${f1(sL)} ч`;
+    if(sB!=null){const d=sL-sB;s+=Math.abs(d)<0.75?`, как обычно (${baseTxt}${f1(sB)} ч).`:d>0?`, больше обычного (${baseTxt}${f1(sB)} ч).`:`, меньше обычного (${baseTxt}${f1(sB)} ч).`}else s+=".";
+    const short=sl.filter(x=>x[1]<6),long=sl.filter(x=>x[1]>10);
+    if(short.length)s+=` Меньше 6 ч: ${short.map(x=>fmtShort(x[0])).join(", ")}.`;
+    if(long.length)s+=` Больше 10 ч: ${long.map(x=>fmtShort(x[0])).join(", ")}.`;
+    out.push(s);
+  }
+  const miss=L.map(k=>{const e=E[k];if(!e.meds)return null;const m=meds.filter(n=>n in e.meds&&!e.meds[n]);return m.length?fmtShort(k)+" ("+m.join(", ")+")":null}).filter(Boolean);
+  const medDays=L.filter(k=>medsTaken(E[k],meds)).length;
+  if(miss.length)out.push(`Пропуски препаратов: ${miss.join("; ")}.`);
+  else if(medDays)out.push(`Препараты приняты во все ${medDays} дн. с отметкой.`);
+  const lvl=[["energy","Энергия"],["irrit","Раздражительность"],["anxiety","Тревога"]].map(([f,l])=>{
+    const a=avg(L.map(k=>E[k][f])),b=hasBase?avg(B.map(k=>E[k][f])):null;if(a==null)return null;
+    if(b!=null&&Math.abs(a-b)>=1.5)return `${l} ${a>b?"выше":"ниже"} обычного (${f1(a)} против ${f1(b)})`;
+    if(f!=="energy"&&a>=7)return `${l} высокая (в среднем ${f1(a)})`;
+    return null}).filter(Boolean);
+  if(lvl.length){const t=lvl.map(x=>x.charAt(0).toLowerCase()+x.slice(1)).join("; ");out.push(t.charAt(0).toUpperCase()+t.slice(1)+".")}
+  const imp=L.filter(k=>(E[k].impuls||0)>=2);if(imp.length)out.push(`Заметная импульсивность: ${imp.map(fmtShort).join(", ")}.`);
+  const sg=L.filter(k=>(E[k].signs||[]).length);if(sg.length)out.push(`Личные предвестники отмечены: ${sg.map(fmtShort).join(", ")}.`);
+  const ev=eventsList().filter(x=>x.date>=last[0]&&x.date<=ref);
+  if(ev.length)out.push(ev.map(x=>`${fmtShort(x.date)} — ${EVENT_TYPES[x.type]||"событие"}${x.text?": "+x.text:""}`).join("; ")+".");
+  const sh=L.filter(k=>E[k].selfharm==="yes");
+  if(sh.length)out.push(`Мысли о самоповреждении отмечены: ${sh.map(fmtShort).join(", ")}. Об этом важно сказать врачу.`);
+  if(!hasBase)out.push("Сравнение с обычным уровнем появится, когда наберётся хотя бы 5 записей за предыдущие 4 недели.");
+  return out;
+}
+function weekSummaryHTML(E,meds){
+  const lines=weekSummary(E,meds,todayKey());
+  return `<div class="panel field summary"><span class="label">Коротко о последних 7 днях</span>
+    <ul class="sum-list">${lines.map(l=>`<li>${esc(l)}</li>`).join("")}</ul></div>`;
+}
+
+/* ---------- изменения лечения и визиты к врачу ---------- */
+const EVENT_TYPES={treat:"изменение лечения",visit:"визит к врачу",other:"событие"};
+const EVENT_LETTER={treat:"Л",visit:"В",other:"•"};
+function eventsList(){return S.demo?[]:Object.entries(S.events).map(([id,e])=>Object.assign({id},e)).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0)}
+function eventsOn(k){return eventsList().filter(e=>e.date===k)}
+function eventsPanelHTML(){
+  if(S.demo)return "";
+  const list=eventsList().slice().reverse();const show=S.evAll?list:list.slice(0,6);
+  const nf=S.evForm||(S.evForm={date:todayKey(),type:"treat",text:""});
+  return `<div class="panel field" id="eventsPanel"><span class="label">Изменения лечения и визиты к врачу</span>
+    <p class="hint">Отмеченные события появляются на графике вертикальной линией (Л — лечение, В — визит), в календаре и в PDF. Так видно, как менялось состояние после смены схемы.</p>
+    <div class="ev-form">
+      <input type="date" id="evDate" value="${esc(nf.date)}">
+      <div class="seg" role="group" aria-label="Тип события">${Object.entries(EVENT_TYPES).map(([v,l])=>`<button type="button" data-evtype="${v}" aria-pressed="${nf.type===v}">${l}</button>`).join("")}</div>
+      <input type="text" id="evText" value="${esc(nf.text)}" placeholder="${nf.type==="treat"?"Например: изменена доза, добавлен препарат":nf.type==="visit"?"Например: плановый приём у психиатра":"Что произошло"}">
+      <button class="btn primary" type="button" id="evAdd" ${S.ready?"":"disabled"}>Добавить</button>
+    </div>
+    ${list.length?`<ul class="ev-list">${show.map(e=>`<li><span class="ev-badge ev-${e.type}">${EVENT_LETTER[e.type]||"•"}</span><span class="num ev-date">${fmtFull(e.date)}</span><span class="ev-text"><strong>${EVENT_TYPES[e.type]||"событие"}</strong>${e.text?" — "+esc(e.text):""}</span><button class="btn ghost small" type="button" data-evdel="${e.id}">${S.evDelAsk===e.id?"Точно удалить?":"Удалить"}</button></li>`).join("")}</ul>
+      ${list.length>6?`<button class="btn ghost small" type="button" id="evAll">${S.evAll?"Свернуть":"Показать все ("+list.length+")"}</button>`:""}`:`<p class="hint">Пока событий нет.</p>`}
+  </div>`;
+}
+
+/* ---------- опросники PHQ-9 и ASRM ---------- */
+const QUIZ={
+  phq9:{name:"PHQ-9",what:"депрессия",period:"последние 2 недели",every:14,max:27,
+    q:"Как часто за последние 2 недели вас беспокоило следующее?",
+    opts:["Ни разу","Несколько дней","Больше половины дней","Почти каждый день"],
+    items:["Слабый интерес или удовольствие от обычных дел","Подавленность, тоска или ощущение безнадёжности","Трудно заснуть, сон прерывистый — или сна слишком много","Усталость, упадок сил","Плохой аппетит или переедание","Плохое мнение о себе: ощущение, что вы неудачник или подвели себя или близких","Трудно сосредоточиться — например, на чтении или фильме","Движения или речь заметно замедлены — или, наоборот, вы беспокойны и суетитесь больше обычного","Мысли о том, что лучше было бы умереть, или о причинении себе вреда"],
+    level:s=>s<=4?["минимальные симптомы депрессии","ok"]:s<=9?["лёгкие симптомы депрессии","watch"]:s<=14?["умеренные симптомы депрессии","doctor"]:s<=19?["умеренно тяжёлые симптомы депрессии","doctor"]:["тяжёлые симптомы депрессии","urgent"]},
+  asrm:{name:"ASRM",what:"мания и гипомания",period:"последнюю неделю",every:7,max:20,
+    q:"Как часто за последнюю неделю было так?",
+    opts:["Нет","Иногда","Часто","Большую часть времени","Постоянно"],
+    items:["Настроение радостнее или бодрее, чем обычно","Уверенность в себе выше, чем обычно","Нужно меньше сна, чем обычно, и при этом нет усталости","Говорю больше, чем обычно","Активность выше обычной — в общении, работе, делах или сексуальной жизни"],
+    level:s=>s<=5?["признаки мании не выражены","ok"]:["вероятны признаки гипомании или мании (6 баллов и выше)","doctor"]}
+};
+function quizList(type){return Object.values(S.quiz).filter(q=>q&&q.type===type&&Array.isArray(q.answers)).sort((a,b)=>a.date<b.date?-1:1)}
+function quizLast(type){const l=quizList(type);return l[l.length-1]||null}
+function quizDue(type){const l=quizLast(type);if(!l)return true;return addDays(l.date,QUIZ[type].every)<=todayKey()}
+function quizCardsHTML(){
+  const card=type=>{const Q=QUIZ[type],last=quizLast(type);const lv=last?Q.level(last.score):null;
+    return `<div class="quiz-card">
+      <div class="block-head"><h3>${Q.name} · ${Q.what}</h3>${quizDue(type)?`<span class="pill due">пора пройти</span>`:""}</div>
+      <p class="hint">${Q.items.length} вопросов про ${Q.period}. Раз в ${Q.every===7?"неделю":"2 недели"}.</p>
+      ${last?`<p><strong class="num">${last.score} из ${Q.max}</strong> · ${fmtFull(last.date)} — ${lv[0]}</p>`:`<p class="hint">Ещё не заполнялся.</p>`}
+      <button class="btn ${quizDue(type)?"primary":""} small" type="button" data-quiz="${type}">Пройти${last?" снова":""}</button>
+    </div>`};
+  const open=S.quizOpen;
+  return `<div class="panel field" id="quizPanel"><span class="label">Опросники для врача</span>
+    <p class="hint">Короткие стандартные шкалы, привычные психиатрам. Баллы появятся на «Динамике» и в PDF. Это ориентир для разговора с врачом, а не диагноз.</p>
+    <div class="grid2">${card("phq9")}${card("asrm")}</div>
+    ${open?quizFormHTML(open):""}
+    ${S.quizResult?quizResultHTML(S.quizResult):""}
+  </div>`;
+}
+function quizFormHTML(type){
+  const Q=QUIZ[type],a=S.quizAns||[];const done=a.filter(v=>v!=null).length;
+  return `<div class="quiz-form" id="quizForm"><h3>${Q.name}: ${Q.q}</h3>
+    ${Q.items.map((it,i)=>`<div class="quiz-item"><p><span class="num">${i+1}.</span> ${esc(it)}</p>
+      <div class="seg" role="group">${Q.opts.map((o,v)=>`<button type="button" data-qans="${i}" data-qv="${v}" aria-pressed="${a[i]===v}">${o}</button>`).join("")}</div></div>`).join("")}
+    ${type==="asrm"?`<p class="hint">Адаптированный перевод шкалы Альтмана (ASRM), не прошедший официальной валидации.</p>`:""}
+    <div class="row"><button class="btn primary" type="button" id="quizSave" ${done===Q.items.length?"":"disabled"}>Сохранить результат</button><span class="hint" id="quizProgress">Отвечено ${done} из ${Q.items.length}</span><button class="btn ghost small" type="button" id="quizCancel">Отмена</button></div>
+  </div>`;
+}
+function quizResultHTML(r){
+  const Q=QUIZ[r.type],lv=Q.level(r.score);const harm=r.type==="phq9"&&r.answers[8]>0;
+  return `<div class="alert ${harm?"urgent":lv[1]==="ok"?"":lv[1]}" style="margin-top:6px"><span class="sev"></span><span class="t">${Q.name}: ${r.score} из ${Q.max} — ${lv[0]}</span>
+    <span class="d">${harm?"Вы отметили мысли о смерти или о причинении себе вреда. Пожалуйста, не оставайтесь с этим одни: позвоните врачу, в скорую психиатрическую помощь или по номеру 112.":lv[1]==="ok"?"Результат сохранён.":"Результат сохранён. Покажите его врачу — если состояние меняется, лучше не откладывать до планового приёма."}</span></div>`;
+}
+function quizAlerts(){
+  const out=[];const tk=todayKey();
+  const p=quizLast("phq9");
+  if(p&&addDays(p.date,14)>=tk){
+    if(p.answers[8]>0)out.push({sev:"urgent",t:"PHQ-9 от "+fmtShort(p.date)+": мысли о смерти или самоповреждении",d:"Это повод обратиться за помощью сразу: врач, скорая психиатрическая помощь или 112."});
+    else if(p.score>=15)out.push({sev:"doctor",t:"PHQ-9 от "+fmtShort(p.date)+": "+p.score+" баллов",d:"Выраженные симптомы депрессии по опроснику. Стоит связаться с врачом."});
+  }
+  const a=quizLast("asrm");
+  if(a&&addDays(a.date,7)>=tk&&a.score>=6)out.push({sev:"doctor",t:"ASRM от "+fmtShort(a.date)+": "+a.score+" баллов",d:"По опроснику вероятны признаки гипомании или мании. Стоит сообщить врачу."});
+  return out;
+}
+function quizChartSVG(type){
+  const Q=QUIZ[type],l=quizList(type).slice(-12);if(!l.length)return `<p class="hint">Результатов пока нет.</p>`;
+  const W=340,H=150,L=30,R=10,T=12,B=26,h=H-T-B,n=l.length,step=(W-L-R)/Math.max(n,1);
+  const x=i=>L+step*(i+0.5),y=v=>T+h-v/Q.max*h;
+  const cut=type==="phq9"?[[10,"10 — умеренные"]]:[[6,"6 — порог"]];
+  let g="";
+  for(const v of[0,Math.round(Q.max/2),Q.max])g+=`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${L-6}" y="${y(v)+4}" text-anchor="end" font-size="10" fill="var(--muted)">${v}</text>`;
+  for(const[v,t]of cut)g+=`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--caution)" stroke-dasharray="4 3"/><text x="${W-R}" y="${y(v)-4}" text-anchor="end" font-size="9.5" fill="var(--caution)">${t}</text>`;
+  g+=`<path d="${l.map((q,i)=>(i?"L":"M")+x(i).toFixed(1)+" "+y(q.score).toFixed(1)).join(" ")}" fill="none" stroke="var(--ink)" stroke-width="2"/>`;
+  l.forEach((q,i)=>{g+=`<circle cx="${x(i)}" cy="${y(q.score)}" r="4" fill="var(--surface)" stroke="var(--ink)" stroke-width="2"><title>${fmtFull(q.date)}: ${q.score} из ${Q.max}</title></circle><text x="${x(i)}" y="${y(q.score)-8}" text-anchor="middle" font-size="10" fill="var(--ink-2)">${q.score}</text><text x="${x(i)}" y="${H-8}" text-anchor="middle" font-size="9.5" fill="var(--muted)">${fmtShort(q.date)}</text>`});
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${Q.name}: баллы по датам">${g}</svg>`;
+}
+function quizHistoryHTML(){
+  if(S.demo||(!quizList("phq9").length&&!quizList("asrm").length))return "";
+  return `<div class="panel field"><span class="label">Опросники</span>
+    <div class="grid2"><div class="field"><strong>PHQ-9 · депрессия</strong><span class="hint">0–27, выше — тяжелее</span>${quizChartSVG("phq9")}</div>
+    <div class="field"><strong>ASRM · мания</strong><span class="hint">0–20, от 6 — вероятна гипомания</span>${quizChartSVG("asrm")}</div></div></div>`;
+}
+
+/* ---------- версия и «Что нового» ---------- */
+const APP_VERSION=(window.diary&&window.diary.version)||"1.1.0";
+const CHANGELOG=[
+  ["1.1.0",["Быстрая запись за полминуты: настроение, сон, препараты. Подробная анкета сворачивается.","«Коротко о последних 7 днях» — итог недели словами на «Динамике» и в PDF.","Отметки об изменениях лечения и визитах к врачу: на графике, в календаре и в PDF.","Опросники PHQ-9 (депрессия) и ASRM (мания) на вкладке «Неделя», с графиком баллов.","Номер версии и этот список изменений."]],
+  ["1.0.0",["Ежедневная запись, календарь, графики, недельный обзор, план безопасности.","PDF для врача, вечерние напоминания, перенос записей между компьютером и iPhone."]]
+];
+function verCmp(a,b){const x=String(a).split(".").map(Number),y=String(b).split(".").map(Number);for(let i=0;i<3;i++){if((x[i]||0)!==(y[i]||0))return(x[i]||0)-(y[i]||0)}return 0}
+function seenVersion(){try{return localStorage.getItem("bar-diary-seen")}catch(e){return null}}
+function markSeen(){try{localStorage.setItem("bar-diary-seen",APP_VERSION)}catch(e){}}
+function whatsNewHTML(){
+  const seen=seenVersion();
+  if(!S.showWhatsNew){
+    if(!S.ready)return "";
+    if(!seen){if(!Object.keys(S.entries).length){markSeen();return ""}}
+    else if(verCmp(APP_VERSION,seen)<=0)return "";
+  }
+  const items=CHANGELOG.filter(([v])=>S.showWhatsNew?true:seen?verCmp(v,seen)>0:v===APP_VERSION);
+  return `<div class="panel field whatsnew"><div class="block-head"><span class="label">Что нового · версия ${APP_VERSION}</span><button class="btn small" type="button" id="whatsNewOk">Понятно</button></div>
+    ${items.map(([v,l])=>`<div><strong class="num">${v}</strong><ul class="sum-list">${l.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`).join("")}</div>`;
 }
 
 /* ---------- календарь ---------- */
@@ -611,7 +850,7 @@ function renderCalendar(){
     const k=m0.slice(0,8)+pad(d);const e=E[k];const fut=k>tk;const m=dayMood(e);
     if(!fut)monthKeys.push(k);
     cells+=`<button type="button" class="cday${e?" has":""}${k===tk?" today":""}${k===sel?" sel":""}" data-calday="${k}" ${fut?"disabled":""} title="${esc(dayTitle(k,e,meds))}" style="${e?"background:"+moodFill(m):""}">
-      <span class="cd num">${d}</span><span class="cm num">${m!=null?m:e?"•":""}</span>${marksHTML(e,meds)}</button>`;
+      <span class="cd num">${d}${eventsOn(k).length?` <span class="ev-badge ev-${eventsOn(k)[0].type} small">${EVENT_LETTER[eventsOn(k)[0].type]||"•"}</span>`:""}</span><span class="cm num">${m!=null?m:e?"•":""}</span>${marksHTML(e,meds)}</button>`;
   }
   const st=statsFor(monthKeys,E,meds);
   const missDays=monthKeys.filter(k=>{const t=medsTaken(E[k],meds);return t&&t.taken<t.total}).length;
@@ -636,6 +875,7 @@ function renderCalendar(){
     </div>
     <div class="panel field cal-side">
       <span class="label">${esc(fmtLong(sel))}</span>
+      ${eventsOn(sel).map(x=>`<p class="ev-line"><span class="ev-badge ev-${x.type}">${EVENT_LETTER[x.type]||"•"}</span> <strong>${EVENT_TYPES[x.type]||"событие"}</strong>${x.text?" — "+esc(x.text):""}</p>`).join("")}
       ${se?`<dl class="kv">
         <dt>Настроение</dt><dd class="num">утром ${se.moodAM??"–"}, вечером ${se.moodPM??"–"}</dd>
         <dt>Сон</dt><dd class="num">${ss==null?"—":f1(ss)+" ч"}${se.bed&&se.wake?` (${esc(se.bed)}–${esc(se.wake)})`:""}${se.sleepQ?", качество "+se.sleepQ+"/5":""}</dd>
@@ -687,6 +927,9 @@ function chartSVG(keys,E,meds,o){
   g+=T(L-26,ym(10)+4,"мания",{anchor:"end",size:10.5,fill:"var(--man)"});
   g+=T(L-26,ym(5.5)+4,"ровно",{anchor:"end",size:10.5});
   g+=T(L-26,ym(1)+4,"депрессия",{anchor:"end",size:10.5,fill:"var(--dep)"});
+  // изменения лечения и визиты — вертикальные линии через все блоки
+  (o.events||eventsList()).filter(ev=>keys.includes(ev.date)).forEach(ev=>{const xx=x(keys.indexOf(ev.date));
+    g+=`<line x1="${xx}" x2="${xx}" y1="${mTop-6}" y2="${pY+12}" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="4 3"/><circle cx="${xx}" cy="${mTop-17}" r="8" fill="var(--accent)"><title>${fmtShort(ev.date)} — ${esc(EVENT_TYPES[ev.type]||"событие")}${ev.text?": "+esc(ev.text):""}</title></circle><text x="${xx}" y="${mTop-13.5}" text-anchor="middle" font-size="10" font-weight="700" fill="var(--surface)">${EVENT_LETTER[ev.type]||"•"}</text>`});
   const line=(fn,attrs)=>{let d="",pen=false;keys.forEach((k,i)=>{const v=fn(E[k]);if(v==null){pen=false;return}d+=(pen?"L":"M")+x(i).toFixed(1)+" "+ym(v).toFixed(1)+" ";pen=true});return d?`<path d="${d}" fill="none" ${attrs}/>`:""};
   if(o.energy)g+=line(e=>e&&typeof e.energy==="number"?e.energy:null,`stroke="var(--caution)" stroke-width="2" stroke-dasharray="5 4"`);
   if(o.am)g+=line(e=>e&&typeof e.moodAM==="number"?e.moodAM:null,`stroke="var(--ink-2)" stroke-width="1.2" stroke-dasharray="1.5 3"`);
@@ -752,6 +995,7 @@ function renderTrends(){
   <div class="block-head"><h2>Динамика</h2>
     <div class="row"><div class="rangesel seg">${[14,30,90].map(n=>`<button type="button" data-range="${n}" aria-pressed="${S.range===n}">${n} дней</button>`).join("")}</div>
     ${S.demo?"":`<button class="btn small" type="button" data-pdf="${S.range}">Сохранить в PDF</button>`}</div></div>
+  ${weekSummaryHTML(E,meds)}
   ${al.length?`<div class="field"><span class="label">Сигналы за последние дни</span>${alertsHTML(al)}</div>`:`<p class="hint">Сигналов, требующих внимания, за последние дни нет.</p>`}
   <div class="stats">
     <div class="stat"><span class="label">Настроение</span><span class="v">${f1(st.moodAvg)}</span><span class="s num">от ${f1(st.moodMin)} до ${f1(st.moodMax)}</span></div>
@@ -761,12 +1005,16 @@ function renderTrends(){
     <div class="stat"><span class="label">Записей</span><span class="v">${st.filled}</span><span class="s">из ${S.range} дней</span></div>
   </div>
   ${mainChartPanelHTML(E,meds)}
+  ${eventsPanelHTML()}
+  ${quizHistoryHTML()}
   <div class="grid2">
     ${levelsPanelHTML(keys,E)}
     ${triggersPanelHTML(keys,E,st,trig)}
   </div>`;
 }
 
+function rerenderEvents(){const p=$("eventsPanel");if(p)p.outerHTML=eventsPanelHTML()}
+function rerenderQuiz(){const p=$("quizPanel");if(p)p.outerHTML=quizCardsHTML()}
 function chartOpts(){
   if(!S.chartOpts){S.chartOpts={pm:true,am:false,energy:false};try{Object.assign(S.chartOpts,JSON.parse(localStorage.getItem("bar-diary-chart")||"{}"))}catch(e){}}
   return S.chartOpts;
@@ -883,6 +1131,7 @@ function renderWeek(){
     <button class="iconbtn" type="button" data-weeknav="-7" aria-label="Предыдущая неделя">←</button>
     <button class="iconbtn" type="button" data-weeknav="7" aria-label="Следующая неделя" ${isCur?"disabled":""}>→</button></div>
   <p class="lede">Раз в неделю — развёрнутый обзор. Так проще заметить тенденции, которые не видны день ото дня.</p>
+  ${S.demo?"":quizCardsHTML()}
   <div class="panel field"><span class="label">Как прошла неделя по записям</span>
     <div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;max-width:420px">${days}</div>
     <p class="derived">Записей: <strong>${st.filled} из 7</strong> · настроение от <strong class="num">${f1(st.moodMin)}</strong> до <strong class="num">${f1(st.moodMax)}</strong> · сон в среднем <strong class="num">${f1(st.sleepAvg)} ч</strong>, коротких ночей: <strong>${st.shortNights}</strong> · препараты: <strong>${st.adh==null?"—":Math.round(st.adh*100)+"%"}</strong> · импульсивных дней: <strong>${st.impulsDays}</strong></p>
@@ -934,6 +1183,9 @@ function buildReport(n){
   meds.forEach(m=>{let t=0,tot=0;keys.forEach(k=>{const e=E[k];if(e&&e.meds&&m in e.meds){tot++;if(e.meds[m])t++}});L.push("Приём «"+m+"»: отмечен "+t+" из "+tot+" дней с записью")});
   const trig=Object.entries(st.trig).sort((a,b)=>b[1]-a[1]);
   if(trig.length)L.push("Триггеры: "+trig.map(([t,c])=>t+" ×"+c).join(", "));
+  L.push("");L.push("КОРОТКО О ПОСЛЕДНИХ 7 ДНЯХ");weekSummary(E,meds,end).forEach(x=>L.push("• "+x));
+  const evs=eventsList().filter(x=>x.date>=keys[0]&&x.date<=end);if(evs.length){L.push("");L.push("ИЗМЕНЕНИЯ ЛЕЧЕНИЯ И ВИЗИТЫ");evs.forEach(x=>L.push(fmtShort(x.date)+" — "+(EVENT_TYPES[x.type]||"событие")+(x.text?": "+x.text:"")))}
+  const qs=[...quizList("phq9"),...quizList("asrm")].filter(q=>q.date>=keys[0]).sort((a,b)=>a.date<b.date?-1:1);if(qs.length){L.push("");L.push("ОПРОСНИКИ");qs.forEach(q=>L.push(fmtShort(q.date)+" — "+QUIZ[q.type].name+": "+q.score+" из "+QUIZ[q.type].max+" ("+QUIZ[q.type].level(q.score)[0]+")"))}
   const al=analyze(E,end,meds);if(al.length){L.push("");L.push("СИГНАЛЫ ЗА ПОСЛЕДНИЕ ДНИ");al.forEach(a=>L.push("• "+a.t))}
   const sh=keys.filter(k=>E[k]&&E[k].selfharm==="yes");if(sh.length){L.push("");L.push("Мысли о самоповреждении отмечены: "+sh.map(fmtShort).join(", "))}
   const se=keys.filter(k=>E[k]&&E[k].sideEffects&&E[k].sideEffects.trim());
@@ -962,6 +1214,13 @@ function lineChartSVG(keys,E,series,title){
   const every=Math.ceil(n/10);
   keys.forEach((k,i)=>{if((n-1-i)%every===0)g+=`<text x="${x(i)}" y="${H-6}" text-anchor="${i===0?"start":i===n-1?"end":"middle"}" font-size="10.5" fill="var(--muted)">${fmtShort(k)}</text>`});
   return `<svg viewBox="0 0 ${W} ${H}">${g}</svg>`;
+}
+function pdfEventsQuizHTML(keys){
+  const evs=eventsList().filter(x=>x.date>=keys[0]&&x.date<=keys[keys.length-1]);
+  const qs=[...quizList("phq9"),...quizList("asrm")].filter(q=>q.date>=keys[0]).sort((a,b)=>a.date<b.date?-1:1);
+  if(!evs.length&&!qs.length)return "";
+  return `<div class="cols keep"><div><h2>Изменения лечения и визиты</h2><ul>${evs.map(x=>`<li><span class="num">${fmtShort(x.date)}</span> — ${esc(EVENT_TYPES[x.type]||"событие")}${x.text?": "+esc(x.text):""}</li>`).join("")||"<li>Не отмечались</li>"}</ul></div>
+  <div><h2>Опросники</h2><ul>${qs.map(q=>`<li><span class="num">${fmtShort(q.date)}</span> — ${QUIZ[q.type].name}: <strong>${q.score} из ${QUIZ[q.type].max}</strong>, ${QUIZ[q.type].level(q.score)[0]}${q.type==="phq9"&&q.answers[8]>0?" <span class=\"urgent\">(вопрос 9: мысли о смерти или самоповреждении)</span>":""}</li>`).join("")||"<li>Не заполнялись</li>"}</ul></div></div>`;
 }
 function buildPdfHTML(n){
   const E=S.entries,meds=S.settings.meds,end=todayKey(),keys=rangeKeys(n,end),st=statsFor(keys,E,meds);
@@ -1017,9 +1276,10 @@ thead{display:table-header-group}h2{break-after:avoid}
   <div class="stat"><div class="l">Препараты</div><div class="v">${st.adh==null?"—":Math.round(st.adh*100)+"%"}</div><div class="s">отмеченных приёмов</div></div>
   <div class="stat"><div class="l">Импульсивность</div><div class="v">${st.impulsDays}</div><div class="s">дней «заметно» и выше</div></div>
 </div>
+<div class="keep"><h2>Коротко о последних 7 днях</h2><ul>${weekSummary(E,meds,end).map(l=>`<li>${esc(l)}</li>`).join("")}</ul></div>
 <div class="keep">
 <h2>Настроение, энергия, сон и приём препаратов</h2>
-<div class="sub">Шкала настроения: 1 — глубокая депрессия, 10 — выраженная мания.</div>
+<div class="sub">Шкала настроения: 1 — глубокая депрессия, 10 — выраженная мания. Вертикальные линии: Л — изменение лечения, В — визит к врачу.</div>
 ${chartSVG(keys,E,meds,{pm:true,am:true,energy:true})}
 <div class="legend"><span><i></i>Настроение вечером (1 — депрессия, 10 — мания)</span><span><i style="background:none;border:1.5px solid var(--ink-2);width:8px;height:8px;border-radius:50%"></i>Настроение утром</span><span><i style="background:var(--caution);width:7px;height:7px"></i>Энергия</span><span><i style="background:var(--accent-soft);height:9px"></i>Середина шкалы 4–7</span><span><i style="background:var(--man);height:7px"></i>Сон &lt; 6 ч</span><span><i style="background:var(--accent);height:7px"></i>Сон 6–10 ч</span><span><i style="background:var(--dep);height:7px"></i>Сон &gt; 10 ч</span><span><i style="background:var(--ok);height:7px"></i>Препараты: все</span><span><i style="background:var(--man);height:7px"></i>часть</span><span><i style="background:var(--warn);height:7px"></i>пропуск</span><span><i style="background:var(--sunk);height:7px"></i>нет отметки</span></div>
 </div>
@@ -1028,6 +1288,7 @@ ${chartSVG(keys,E,meds,{pm:true,am:true,energy:true})}
 ${lineChartSVG(keys,E,[{f:"irrit",c:"var(--man)"},{f:"anxiety",c:"var(--dep)",dash:"5 4"}],"Оценка 1–10")}
 <div class="legend"><span><i style="background:var(--man)"></i>Раздражительность</span><span><i style="background:repeating-linear-gradient(90deg,var(--dep) 0 5px,transparent 5px 9px)"></i>Тревога</span></div>
 </div>
+${pdfEventsQuizHTML(keys)}
 <div class="cols keep">
   <div><h2>Приём препаратов</h2><ul>${medAdh.map(([m,t,tot])=>`<li>${esc(m)}: отмечен ${t} из ${tot} дней с записью</li>`).join("")||"<li>Список препаратов не задан</li>"}</ul>
     <h2>Триггеры</h2><ul>${trig.map(([t,c])=>`<li>${esc(t)} — ${c}</li>`).join("")||"<li>Не отмечались</li>"}</ul></div>
@@ -1225,10 +1486,28 @@ document.addEventListener("click",async ev=>{
   const hit=ev.target.closest(".dayhit");
   if(hit){const k=hit.dataset.chartday;if(!S.demo&&S.entries[k]){S.calSel=k;S.calMonth=monthStart(k);setTab("calendar");S.calSel=k;S.calMonth=monthStart(k);renderCalendar()}return}
   const b=ev.target.closest("button");if(!b)return;
+  if(b.dataset.evtype){S.evForm.type=b.dataset.evtype;rerenderEvents();return}
+  if(b.id==="evAdd"){const f=S.evForm;if(!f.date){toast("Укажите дату события");return}if(f.type==="other"&&!f.text.trim()){toast("Опишите событие в поле рядом с датой");return}
+    const id="e-"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);const data={type:f.type,date:f.date,text:f.text.trim()};b.disabled=true;
+    try{await save(id,data);S.events[id]=Object.assign({},data,{updatedAt:Date.now()});S.evForm={date:todayKey(),type:f.type,text:""};renderTrends();renderCalendar();toast("Событие добавлено")}catch(e){saveErr(e);b.disabled=false}return}
+  if(b.dataset.evdel){const id=b.dataset.evdel;if(S.evDelAsk!==id){S.evDelAsk=id;rerenderEvents();return}S.evDelAsk=null;
+    try{await save(id,Object.assign({},S.events[id],{deleted:true}));delete S.events[id];renderTrends();renderCalendar();toast("Событие удалено")}catch(e){saveErr(e)}return}
+  if(b.id==="evAll"){S.evAll=!S.evAll;rerenderEvents();return}
+  if(b.dataset.quiz){S.quizOpen=b.dataset.quiz;S.quizAns=[];S.quizResult=null;rerenderQuiz();const qf=$("quizForm");if(qf)qf.scrollIntoView({behavior:"smooth",block:"start"});return}
+  if(b.dataset.qans!=null){const i=+b.dataset.qans,v=+b.dataset.qv;S.quizAns[i]=v;b.parentElement.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",String(+x.dataset.qv===v)));
+    const Q=QUIZ[S.quizOpen];const done=Q.items.filter((_,j)=>S.quizAns[j]!=null).length;$("quizProgress").textContent="Отвечено "+done+" из "+Q.items.length;$("quizSave").disabled=done!==Q.items.length;return}
+  if(b.id==="quizCancel"){S.quizOpen=null;S.quizAns=[];rerenderQuiz();return}
+  if(b.id==="quizSave"){const type=S.quizOpen,Q=QUIZ[type];const ans=Q.items.map((_,i)=>S.quizAns[i]);if(ans.some(v=>v==null))return;
+    const score=ans.reduce((a,c)=>a+c,0),date=todayKey(),id="q-"+type+"-"+date,data={type,date,answers:ans,score};b.disabled=true;
+    try{await save(id,data);S.quiz[id]=Object.assign({},data,{updatedAt:Date.now()});S.quizOpen=null;S.quizAns=[];S.quizResult=data;rerenderQuiz();renderTrends();toast("Результат сохранён")}catch(e){saveErr(e);b.disabled=false}return}
+  if(b.id==="whatsNewOk"){markSeen();S.showWhatsNew=false;document.querySelectorAll(".whatsnew").forEach(w=>w.remove());return}
+  if(b.id==="showWhatsNew"){S.showWhatsNew=true;setTab("today");if(!document.querySelector(".whatsnew"))$("view-today").insertAdjacentHTML("afterbegin",whatsNewHTML());window.scrollTo({top:0});return}
   if(b.dataset.chartopt){const o=chartOpts();o[b.dataset.chartopt]=!o[b.dataset.chartopt];if(!o.pm&&!o.am&&!o.energy)o.pm=true;try{localStorage.setItem("bar-diary-chart",JSON.stringify(o))}catch(e){}renderTrends();return}
   if(b.dataset.tab){setTab(b.dataset.tab);return}
-  if(b.classList.contains("sv")){const f=b.dataset.f,v=+b.dataset.v;S.form[f]=S.form[f]===v?null:v;b.parentElement.querySelectorAll(".sv").forEach(x=>x.setAttribute("aria-pressed",String(S.form[f]===+x.dataset.v)));markDirty();return}
-  if(b.dataset.opt!=null&&b.dataset.f){const f=b.dataset.f;let v=b.dataset.opt;if(f==="impuls")v=+v;S.form[f]=S.form[f]===v?null:v;b.parentElement.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",String(String(S.form[f])===x.dataset.opt)));markDirty();return}
+  if(b.classList.contains("sv")){const f=b.dataset.f,v=+b.dataset.v;S.form[f]=S.form[f]===v?null:v;syncField(f);markDirty();return}
+  if(b.dataset.qpart){S.qPart=b.dataset.qpart;const q=document.querySelector(".quick");if(q)q.outerHTML=quickHTML();refreshDerived();return}
+  if(b.dataset.sleepstep){const cur=sleepH(S.form);let v=cur==null?(+b.dataset.sleepstep>0?7:7):cur+(+b.dataset.sleepstep);v=Math.max(0,Math.min(16,Math.round(v*2)/2));S.form.sleepHours=v;markDirty();return}
+  if(b.dataset.opt!=null&&b.dataset.f){const f=b.dataset.f;let v=b.dataset.opt;if(f==="impuls")v=+v;S.form[f]=S.form[f]===v?null:v;syncField(f);markDirty();return}
   if(b.dataset.chip!=null){const f=b.dataset.f,c=b.dataset.chip;const a=S.form[f]=(S.form[f]||[]).slice();const i=a.indexOf(c);if(i<0)a.push(c);else a.splice(i,1);b.setAttribute("aria-pressed",String(i<0));markDirty();return}
   if(b.dataset.daynav){goDate(addDays(S.date,+b.dataset.daynav));return}
   if(b.dataset.goday){goDate(b.dataset.goday);return}
@@ -1266,7 +1545,9 @@ document.addEventListener("click",async ev=>{
 document.addEventListener("input",ev=>{
   const t=ev.target;
   if(t.dataset.in){const f=t.dataset.in;let v=t.value;if(t.type==="number")v=v===""?null:Math.max(0,+v);S.form[f]=v;markDirty();return}
-  if(t.dataset.med!=null){S.form.meds=Object.assign({},S.form.meds||{});S.settings.meds.forEach(m=>{if(!(m in S.form.meds))S.form.meds[m]=false});S.form.meds[t.dataset.med]=t.checked;markDirty();return}
+  if(t.dataset.med!=null){S.form.meds=Object.assign({},S.form.meds||{});S.settings.meds.forEach(m=>{if(!(m in S.form.meds))S.form.meds[m]=false});S.form.meds[t.dataset.med]=t.checked;document.querySelectorAll("input[data-med]").forEach(x=>{if(x.dataset.med===t.dataset.med)x.checked=t.checked});markDirty();return}
+  if(t.id==="evText"){S.evForm.text=t.value;return}
+  if(t.id==="evDate"){S.evForm.date=t.value;return}
   if(t.dataset.wq!=null){const a=S.weekForm.answers=(S.weekForm.answers||WEEK_Q.map(()=>"")).slice();a[+t.dataset.wq]=t.value;S.weekDirty=true;const m=$("weekMsg");m.textContent="Есть несохранённые изменения";m.className="msg dirty";return}
   if(t.id==="wEarly"){S.weekForm.earlyDoctor=t.checked;S.weekDirty=true;const m=$("weekMsg");m.textContent="Есть несохранённые изменения";m.className="msg dirty";return}
   if(t.dataset.plan){S.planForm.plan[t.dataset.plan]=t.value;S.planDirty=true;const m=$("planMsg");m.textContent="Есть несохранённые изменения";m.className="msg dirty";return}
@@ -1278,7 +1559,7 @@ document.addEventListener("keydown",ev=>{
   if(ev.key==="ArrowLeft"){ev.preventDefault();goDate(addDays(S.date,-1))}
   if(ev.key==="ArrowRight"){ev.preventDefault();goDate(addDays(S.date,1))}
 });
-document.addEventListener("toggle",ev=>{if(ev.target.id==="howto")S.howtoOpen=ev.target.open},true);
+document.addEventListener("toggle",ev=>{if(ev.target.id==="howto")S.howtoOpen=ev.target.open;if(ev.target.id==="fullForm"){S.fullOpen=ev.target.open;try{localStorage.setItem("bar-diary-full",S.fullOpen?"1":"0")}catch(e){}}},true);
 document.addEventListener("change",ev=>{
   const t=ev.target;
   if(t.id==="datePick"&&t.value){goDate(t.value);return}
@@ -1293,6 +1574,7 @@ loadForm();loadWeekForm();
 let startTab="today";try{const t=localStorage.getItem("bar-diary-tab");if(t&&$("view-"+t))startTab=t}catch(e){}
 try{applyTheme(localStorage.getItem("bar-diary-theme")||"system")}catch(e){applyTheme("system")}
 renderAll();setTab(startTab);
+$("appVer").textContent=APP_VERSION;
 initStore();
 if(window.diary&&window.diary.getPrefs)loadPrefs();
 })();
