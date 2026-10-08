@@ -183,6 +183,15 @@ textarea{resize:vertical;min-height:64px}
 .steps{margin:0;padding-left:1.3em;display:flex;flex-direction:column;gap:6px;color:var(--ink-2)}
 .steps strong{color:var(--ink)}
 
+/* main chart */
+.chip .sw{display:inline-block;width:14px;margin-right:7px;vertical-align:middle}
+.chip[aria-pressed="false"]{opacity:.75}
+.dayhit{fill:transparent;cursor:pointer}
+.dayhit:hover{fill:var(--ink);fill-opacity:.06}
+.howto summary{cursor:pointer;color:var(--accent);font-weight:500;font-size:.92rem}
+.howto-body{display:flex;flex-direction:column;gap:8px;margin-top:10px;font-size:.9rem;max-width:72ch}
+.howto-body strong{color:var(--ink)}
+
 /* levels & triggers */
 .lvl{display:flex;flex-direction:column;gap:6px;padding-bottom:6px}
 .lvl-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
@@ -656,32 +665,64 @@ function renderCalendar(){
 
 /* ---------- trends ---------- */
 function rangeKeys(n,end){const r=[];for(let i=n-1;i>=0;i--)r.push(addDays(end,-i));return r}
-function chartSVG(keys,E,meds){
-  const W=720,L=34,R=10,top=14,mH=170,sTop=214,sH=70,medY=312,H=340;
-  const n=keys.length,step=(W-L-R)/Math.max(n-1,1);
-  const x=i=>L+i*step, ym=v=>top+(10-v)/9*mH, ys=h=>sTop+sH-Math.min(h,12)/12*sH;
+/* Основной график: три отдельных блока — настроение, сон, препараты — с общей осью дат.
+   o.pm / o.am / o.energy — какие линии показывать в блоке настроения;
+   o.interactive — подсказки по дню и переход в календарь по щелчку. */
+function chartSVG(keys,E,meds,o){
+  o=Object.assign({pm:true,am:false,energy:false,interactive:false},o||{});
+  const W=720,L=88,R=14;
+  const mTop=34,mH=176;                        // настроение
+  const sHead=mTop+mH+44,sTop=sHead+22,sH=84;  // сон
+  const pHead=sTop+sH+40,pY=pHead+20;          // препараты
+  const H=pY+40;
+  const n=keys.length,step=(W-L-R)/Math.max(n,1);
+  const x=i=>L+step*(i+0.5), ym=v=>mTop+(10-v)/9*mH, ys=h=>sTop+sH-Math.min(h,12)/12*sH;
+  const T=(xx,yy,txt,opt)=>`<text x="${xx}" y="${yy}" font-size="${(opt&&opt.size)||11}" ${opt&&opt.anchor?`text-anchor="${opt.anchor}"`:""} ${opt&&opt.weight?`font-weight="${opt.weight}"`:""} fill="${(opt&&opt.fill)||"var(--muted)"}">${txt}</text>`;
+  const head=(yy,title)=>T(14,yy,title,{size:13,weight:600,fill:"var(--ink)"});
   let g="";
+  // --- настроение
+  g+=head(14,"Настроение");
   g+=`<rect x="${L}" y="${ym(7)}" width="${W-L-R}" height="${ym(4)-ym(7)}" fill="var(--accent-soft)"/>`;
-  for(const v of[1,4,7,10]){g+=`<line x1="${L}" x2="${W-R}" y1="${ym(v)}" y2="${ym(v)}" stroke="var(--line)" stroke-width="1"/><text x="${L-8}" y="${ym(v)+4}" text-anchor="end" font-size="11" fill="var(--muted)">${v}</text>`}
-  g+=`<text x="${W-R}" y="${ym(10)-4}" text-anchor="end" font-size="10" fill="var(--muted)">мания</text><text x="${W-R}" y="${ym(1)+14}" text-anchor="end" font-size="10" fill="var(--muted)">депрессия</text>`;
+  for(const v of[1,4,7,10])g+=`<line x1="${L}" x2="${W-R}" y1="${ym(v)}" y2="${ym(v)}" stroke="var(--line)"/>`+T(L-8,ym(v)+4,v,{anchor:"end"});
+  g+=T(L-26,ym(10)+4,"мания",{anchor:"end",size:10.5,fill:"var(--man)"});
+  g+=T(L-26,ym(5.5)+4,"ровно",{anchor:"end",size:10.5});
+  g+=T(L-26,ym(1)+4,"депрессия",{anchor:"end",size:10.5,fill:"var(--dep)"});
   const line=(fn,attrs)=>{let d="",pen=false;keys.forEach((k,i)=>{const v=fn(E[k]);if(v==null){pen=false;return}d+=(pen?"L":"M")+x(i).toFixed(1)+" "+ym(v).toFixed(1)+" ";pen=true});return d?`<path d="${d}" fill="none" ${attrs}/>`:""};
-  g+=line(e=>e&&typeof e.energy==="number"?e.energy:null,`stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4 4"`);
-  g+=line(e=>e&&typeof e.moodPM==="number"?e.moodPM:null,`stroke="var(--ink)" stroke-width="2" stroke-linejoin="round"`);
+  if(o.energy)g+=line(e=>e&&typeof e.energy==="number"?e.energy:null,`stroke="var(--caution)" stroke-width="2" stroke-dasharray="5 4"`);
+  if(o.am)g+=line(e=>e&&typeof e.moodAM==="number"?e.moodAM:null,`stroke="var(--ink-2)" stroke-width="1.2" stroke-dasharray="1.5 3"`);
+  if(o.pm)g+=line(e=>e&&typeof e.moodPM==="number"?e.moodPM:null,`stroke="var(--ink)" stroke-width="2.2" stroke-linejoin="round"`);
   keys.forEach((k,i)=>{const e=E[k];if(!e)return;
-    if(typeof e.moodAM==="number")g+=`<circle cx="${x(i)}" cy="${ym(e.moodAM)}" r="3.5" fill="var(--surface)" stroke="var(--ink-2)" stroke-width="1.5"/>`;
-    if(typeof e.moodPM==="number")g+=`<circle cx="${x(i)}" cy="${ym(e.moodPM)}" r="4.5" fill="${moodColor(e.moodPM)}" stroke="var(--ink)" stroke-width="1.5"/>`;
-    if(e.selfharm==="yes")g+=`<circle cx="${x(i)}" cy="${top-4}" r="4" fill="var(--warn)"/>`;
+    if(o.energy&&typeof e.energy==="number")g+=`<rect x="${x(i)-3}" y="${ym(e.energy)-3}" width="6" height="6" fill="var(--caution)"/>`;
+    if(o.am&&typeof e.moodAM==="number")g+=`<circle cx="${x(i)}" cy="${ym(e.moodAM)}" r="3.5" fill="var(--surface)" stroke="var(--ink-2)" stroke-width="1.5"/>`;
+    if(o.pm&&typeof e.moodPM==="number")g+=`<circle cx="${x(i)}" cy="${ym(e.moodPM)}" r="5" fill="${moodColor(e.moodPM)}" stroke="var(--ink)" stroke-width="1.5"/>`;
+    if(e.selfharm==="yes")g+=`<circle cx="${x(i)}" cy="${mTop-10}" r="4.5" fill="var(--warn)"/>`;
   });
-  g+=`<text x="${L}" y="${sTop-8}" font-size="11" fill="var(--muted)">Сон, часы</text>`;
-  for(const h of[6,9]){g+=`<line x1="${L}" x2="${W-R}" y1="${ys(h)}" y2="${ys(h)}" stroke="var(--line)" stroke-dasharray="2 3"/><text x="${L-8}" y="${ys(h)+4}" text-anchor="end" font-size="11" fill="var(--muted)">${h}</text>`}
-  const bw=Math.max(2,Math.min(14,step*0.6));
-  keys.forEach((k,i)=>{const s=sleepH(E[k]);if(s==null)return;const c=s<6?"var(--man)":s>10?"var(--dep)":"var(--accent)";g+=`<rect x="${(x(i)-bw/2).toFixed(1)}" y="${ys(s).toFixed(1)}" width="${bw.toFixed(1)}" height="${(sTop+sH-ys(s)).toFixed(1)}" rx="1.5" fill="${c}"/>`});
-  g+=`<line x1="${L}" x2="${W-R}" y1="${sTop+sH}" y2="${sTop+sH}" stroke="var(--line)"/>`;
-  g+=`<text x="${L}" y="${medY-12}" font-size="11" fill="var(--muted)">Приём препаратов</text>`;
-  keys.forEach((k,i)=>{const t=medsTaken(E[k],meds);const c=!t?"var(--sunk)":t.taken===t.total?"var(--ok)":t.taken?"var(--man)":"var(--warn)";g+=`<rect x="${(x(i)-bw/2).toFixed(1)}" y="${medY-4}" width="${bw.toFixed(1)}" height="8" rx="2" fill="${c}"/>`});
-  const every=Math.ceil(n/10);
-  keys.forEach((k,i)=>{if((n-1-i)%every===0)g+=`<text x="${x(i)}" y="${H-6}" text-anchor="${i===0?"start":i===n-1?"end":"middle"}" font-size="10.5" fill="var(--muted)">${fmtShort(k)}</text>`});
+  // --- сон
+  g+=head(sHead,"Сон, часов");
+  for(const h of[0,3,6,9,12])g+=`<line x1="${L}" x2="${W-R}" y1="${ys(h)}" y2="${ys(h)}" stroke="var(--line)" ${h===6||h===9?'stroke-dasharray="3 3"':""}/>`+T(L-8,ys(h)+4,h,{anchor:"end"});
+  const bw=Math.max(3,Math.min(18,step*0.62));
+  keys.forEach((k,i)=>{const sl=sleepH(E[k]);if(sl==null)return;const c=sl<6?"var(--man)":sl>10?"var(--dep)":"var(--accent)";
+    g+=`<rect x="${(x(i)-bw/2).toFixed(1)}" y="${ys(sl).toFixed(1)}" width="${bw.toFixed(1)}" height="${(sTop+sH-ys(sl)).toFixed(1)}" rx="2" fill="${c}"/>`;
+    if(step>=17)g+=T(x(i),ys(sl)-4,f1(sl).replace(/,0$/,""),{anchor:"middle",size:9.5,fill:"var(--ink-2)"});});
+  // --- препараты
+  g+=head(pHead,"Приём препаратов");
+  keys.forEach((k,i)=>{const t=medsTaken(E[k],meds);const c=!t?"var(--sunk)":t.taken===t.total?"var(--ok)":t.taken?"var(--man)":"var(--warn)";
+    g+=`<rect x="${(x(i)-bw/2).toFixed(1)}" y="${pY}" width="${bw.toFixed(1)}" height="10" rx="2" fill="${c}"/>`;
+    if(t&&t.taken<t.total&&step>=17)g+=T(x(i),pY-3,t.taken+"/"+t.total,{anchor:"middle",size:9,fill:"var(--ink-2)"});});
+  // --- даты
+  const every=Math.max(1,Math.ceil(n/12));
+  keys.forEach((k,i)=>{if((n-1-i)%every===0)g+=T(x(i),H-8,fmtShort(k),{anchor:"middle",size:10.5})});
+  // --- подсказки по дню
+  if(o.interactive)keys.forEach((k,i)=>{g+=`<rect class="dayhit" data-chartday="${k}" x="${(L+step*i).toFixed(1)}" y="${mTop-16}" width="${step.toFixed(1)}" height="${(H-mTop).toFixed(1)}"><title>${esc(dayTitle(k,E[k],meds))}${E[k]?"\nЩёлкните, чтобы открыть день в календаре":""}</title></rect>`});
   return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="График настроения, сна и приёма препаратов">${g}</svg>`;
+}
+function chartKeys(range,E){
+  // Если записи начались позже начала периода, график начинается с первой записи (но не короче недели).
+  const keys=rangeKeys(range,todayKey());
+  const first=keys.findIndex(k=>E[k]);
+  if(first<=0)return{keys,from:null};
+  const start=Math.max(0,Math.min(first,keys.length-7));
+  return start>0?{keys:keys.slice(start),from:keys[first]}:{keys,from:null};
 }
 function statsFor(keys,E,meds){
   const es=keys.map(k=>E[k]).filter(Boolean);
@@ -719,31 +760,38 @@ function renderTrends(){
     <div class="stat"><span class="label">Препараты</span><span class="v">${st.adh==null?"—":Math.round(st.adh*100)+"%"}</span><span class="s">отмеченных приёмов</span></div>
     <div class="stat"><span class="label">Записей</span><span class="v">${st.filled}</span><span class="s">из ${S.range} дней</span></div>
   </div>
-  <div class="panel">
-    <div class="chart-wrap">${chartSVG(keys,E,meds)}</div>
-    <div class="legend-groups">
-      <div class="legend"><span class="lg-title">Настроение и энергия</span>
-        <span><i></i>Настроение вечером</span>
-        <span><i style="background:none;border:1.5px solid var(--ink-2);width:9px;height:9px;border-radius:50%"></i>Настроение утром</span>
-        <span><i style="background:repeating-linear-gradient(90deg,var(--muted) 0 4px,transparent 4px 8px)"></i>Энергия</span>
-        <span><i style="background:var(--accent-soft);height:10px"></i>Середина шкалы, 4–7</span>
-        <span><i style="background:${moodFill(2)};height:10px;width:10px;border-radius:50%"></i><i style="background:${moodFill(9)};height:10px;width:10px;border-radius:50%"></i>Цвет точки: ниже — к депрессии, выше — к мании</span></div>
-      <div class="legend"><span class="lg-title">Сон, часы</span>
-        <span><i style="background:var(--man);height:8px"></i>Меньше 6 ч</span>
-        <span><i style="background:var(--accent);height:8px"></i>6–10 ч</span>
-        <span><i style="background:var(--dep);height:8px"></i>Больше 10 ч</span>
-        <span><i style="background:none;border-top:1px dashed var(--muted);height:0"></i>Линии 6 и 9 ч — для ориентира</span></div>
-      <div class="legend"><span class="lg-title">Приём препаратов</span>
-        <span><i style="background:var(--ok);height:8px"></i>Все приняты</span>
-        <span><i style="background:var(--man);height:8px"></i>Часть пропущена</span>
-        <span><i style="background:var(--warn);height:8px"></i>Все пропущены</span>
-        <span><i style="background:var(--sunk);height:8px"></i>Нет отметки</span></div>
-      <p class="hint">Красная точка над графиком — день, когда отмечены мысли о самоповреждении.</p>
-    </div>
-  </div>
+  ${mainChartPanelHTML(E,meds)}
   <div class="grid2">
     ${levelsPanelHTML(keys,E)}
     ${triggersPanelHTML(keys,E,st,trig)}
+  </div>`;
+}
+
+function chartOpts(){
+  if(!S.chartOpts){S.chartOpts={pm:true,am:false,energy:false};try{Object.assign(S.chartOpts,JSON.parse(localStorage.getItem("bar-diary-chart")||"{}"))}catch(e){}}
+  return S.chartOpts;
+}
+function mainChartPanelHTML(E,meds){
+  const o=chartOpts();const{keys,from}=chartKeys(S.range,E);
+  const tg=(k,label,sw)=>`<button type="button" class="chip" data-chartopt="${k}" aria-pressed="${!!o[k]}">${sw}${label}</button>`;
+  return `<div class="panel field">
+    <div class="block-head"><span class="label">График за ${S.range} дней${from?" · записи с "+fmtShort(from):""}</span>
+      <div class="chips" role="group" aria-label="Что показать на графике настроения">
+        ${tg("pm","Настроение вечером",`<i class="sw" style="background:var(--ink);height:3px"></i>`)}
+        ${tg("am","Настроение утром",`<i class="sw" style="border:1.5px solid var(--ink-2);border-radius:50%;width:9px;height:9px"></i>`)}
+        ${tg("energy","Энергия",`<i class="sw" style="background:var(--caution);width:7px;height:7px"></i>`)}
+      </div></div>
+    <div class="chart-wrap">${chartSVG(keys,E,meds,Object.assign({interactive:true},o))}</div>
+    <details class="howto" id="howto" ${S.howtoOpen?"open":""}>
+      <summary>Как читать этот график</summary>
+      <div class="howto-body">
+        <p><strong>Каждый столбец по горизонтали — один день.</strong> Наведите мышь на день, чтобы увидеть все его оценки, а щелчок откроет этот день в календаре.</p>
+        <p><strong>Настроение.</strong> Чем выше точка, тем выше ваша оценка: 1 — глубокая депрессия, 10 — выраженная мания. Зелёная полоса 4–7 — середина шкалы. Жёлтые точки выше полосы — подъём, синие ниже полосы — спад. Кнопками над графиком можно добавить утреннюю оценку и энергию.</p>
+        <p><strong>Сон.</strong> Высота столбика и число над ним — сколько часов вы спали. Жёлтый — меньше 6 ч, синий — больше 10 ч, зелёный — от 6 до 10 ч.</p>
+        <p><strong>Препараты.</strong> Зелёный — всё принято, жёлтый — часть пропущена (подписано, сколько принято из скольких), красный — всё пропущено, серый — нет отметки.</p>
+        <p>Красная точка над графиком настроения — день, когда отмечены мысли о самоповреждении.</p>
+      </div>
+    </details>
   </div>`;
 }
 
@@ -972,8 +1020,8 @@ thead{display:table-header-group}h2{break-after:avoid}
 <div class="keep">
 <h2>Настроение, энергия, сон и приём препаратов</h2>
 <div class="sub">Шкала настроения: 1 — глубокая депрессия, 10 — выраженная мания.</div>
-${chartSVG(keys,E,meds)}
-<div class="legend"><span><i></i>Настроение вечером</span><span><i style="background:none;border:1.5px solid var(--ink-2);width:8px;height:8px;border-radius:50%"></i>утром</span><span><i style="background:repeating-linear-gradient(90deg,var(--muted) 0 4px,transparent 4px 8px)"></i>Энергия</span><span><i style="background:var(--accent-soft);height:9px"></i>Середина шкалы (4–7)</span><span><i style="background:var(--man);height:7px"></i>Сон &lt; 6 ч</span><span><i style="background:var(--dep);height:7px"></i>Сон &gt; 10 ч</span><span><i style="background:var(--ok);height:7px"></i>Все препараты</span><span><i style="background:var(--man);height:7px"></i>Часть</span><span><i style="background:var(--warn);height:7px"></i>Пропуск</span></div>
+${chartSVG(keys,E,meds,{pm:true,am:true,energy:true})}
+<div class="legend"><span><i></i>Настроение вечером (1 — депрессия, 10 — мания)</span><span><i style="background:none;border:1.5px solid var(--ink-2);width:8px;height:8px;border-radius:50%"></i>Настроение утром</span><span><i style="background:var(--caution);width:7px;height:7px"></i>Энергия</span><span><i style="background:var(--accent-soft);height:9px"></i>Середина шкалы 4–7</span><span><i style="background:var(--man);height:7px"></i>Сон &lt; 6 ч</span><span><i style="background:var(--accent);height:7px"></i>Сон 6–10 ч</span><span><i style="background:var(--dep);height:7px"></i>Сон &gt; 10 ч</span><span><i style="background:var(--ok);height:7px"></i>Препараты: все</span><span><i style="background:var(--man);height:7px"></i>часть</span><span><i style="background:var(--warn);height:7px"></i>пропуск</span><span><i style="background:var(--sunk);height:7px"></i>нет отметки</span></div>
 </div>
 <div class="keep">
 <h2>Раздражительность и тревога</h2>
@@ -1174,7 +1222,10 @@ function setTheme(t){
 darkMQ.addEventListener("change",()=>applyTheme(S.theme));
 
 document.addEventListener("click",async ev=>{
+  const hit=ev.target.closest(".dayhit");
+  if(hit){const k=hit.dataset.chartday;if(!S.demo&&S.entries[k]){S.calSel=k;S.calMonth=monthStart(k);setTab("calendar");S.calSel=k;S.calMonth=monthStart(k);renderCalendar()}return}
   const b=ev.target.closest("button");if(!b)return;
+  if(b.dataset.chartopt){const o=chartOpts();o[b.dataset.chartopt]=!o[b.dataset.chartopt];if(!o.pm&&!o.am&&!o.energy)o.pm=true;try{localStorage.setItem("bar-diary-chart",JSON.stringify(o))}catch(e){}renderTrends();return}
   if(b.dataset.tab){setTab(b.dataset.tab);return}
   if(b.classList.contains("sv")){const f=b.dataset.f,v=+b.dataset.v;S.form[f]=S.form[f]===v?null:v;b.parentElement.querySelectorAll(".sv").forEach(x=>x.setAttribute("aria-pressed",String(S.form[f]===+x.dataset.v)));markDirty();return}
   if(b.dataset.opt!=null&&b.dataset.f){const f=b.dataset.f;let v=b.dataset.opt;if(f==="impuls")v=+v;S.form[f]=S.form[f]===v?null:v;b.parentElement.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",String(String(S.form[f])===x.dataset.opt)));markDirty();return}
@@ -1227,6 +1278,7 @@ document.addEventListener("keydown",ev=>{
   if(ev.key==="ArrowLeft"){ev.preventDefault();goDate(addDays(S.date,-1))}
   if(ev.key==="ArrowRight"){ev.preventDefault();goDate(addDays(S.date,1))}
 });
+document.addEventListener("toggle",ev=>{if(ev.target.id==="howto")S.howtoOpen=ev.target.open},true);
 document.addEventListener("change",ev=>{
   const t=ev.target;
   if(t.id==="datePick"&&t.value){goDate(t.value);return}
