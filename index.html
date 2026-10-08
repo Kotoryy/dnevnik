@@ -212,6 +212,28 @@ textarea{resize:vertical;min-height:64px}
 .ver{display:block;margin-top:8px}
 .linkbtn{background:none;border:0;padding:0;color:var(--accent);cursor:pointer;text-decoration:underline;font:inherit}
 
+/* patterns, year view */
+.pat-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;max-width:80ch}
+.pat-list li{display:grid;grid-template-columns:26px 1fr;gap:10px;align-items:start;color:var(--ink-2)}
+.pat-ico{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;font-weight:700;background:var(--sunk);color:var(--ink)}
+.pat-ico.up{background:color-mix(in oklab,var(--man) 35%,var(--surface))}
+.pat-ico.down{background:color-mix(in oklab,var(--dep) 35%,var(--surface))}
+.year-wrap{overflow-x:auto}
+.yeargrid{display:grid;grid-template-columns:78px repeat(31,minmax(13px,1fr)) 58px;gap:3px;min-width:680px;align-items:center}
+.ym{font-size:.8rem;color:var(--ink-2);text-transform:capitalize}
+.yh{font-size:.68rem;color:var(--muted);text-align:center}
+.yc{position:relative;display:block;aspect-ratio:1;border-radius:3px;border:1px solid var(--line);background:var(--bg);padding:0;cursor:pointer}
+.yc.has{border-color:transparent}
+.yc.none{border:0;background:none;cursor:default}
+.yc.fut{opacity:.35;cursor:default}
+.yc.today{outline:2px solid var(--accent);outline-offset:1px}
+.yc:not(.none):not(.fut):hover{outline:2px solid var(--ink);outline-offset:1px}
+.yev,.yev-l{position:absolute;right:1px;top:1px;width:5px;height:5px;border-radius:50%;background:var(--accent)}
+.legend .yev-l{position:static;display:inline-block;width:8px;height:8px;margin-right:6px;background:var(--accent);border-radius:50%}
+.yavg{font-size:.78rem;color:var(--ink-2);text-align:right}
+.ygrad{display:inline-flex;gap:2px}
+.legend .ygrad i{width:12px;height:12px;border-radius:2px;margin:0}
+
 /* main chart */
 .chip .sw{display:inline-block;width:14px;margin-right:7px;vertical-align:middle}
 .chip[aria-pressed="false"]{opacity:.75}
@@ -398,6 +420,8 @@ function ingest(pairs){
   }
   S.entries=entries;S.weeks=weeks;S.events=events;S.quiz=quiz;
   S.settings=Object.assign(clone(DEFAULT_SETTINGS),settings||{});
+  // Список препаратов ещё ни разу не сохраняли — восстанавливаем его по отметкам в записях.
+  if(!settings||!Array.isArray(settings.meds)){const cnt={};Object.values(entries).forEach(e=>Object.keys(e.meds||{}).forEach(m=>cnt[m]=(cnt[m]||0)+1));S.settings.meds=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])}
   S.settings.plan=Object.assign(clone(DEFAULT_SETTINGS.plan),(settings&&settings.plan)||{});
   S.settings.doctor=Object.assign({name:"",phone:""},(settings&&settings.doctor)||{});
   if(!S.dirty)loadForm();
@@ -496,6 +520,7 @@ function renderToday(){
     <button class="btn small ghost" type="button" data-tab="calendar">Календарь</button>
   </div>
   ${dayStripHTML()}
+  ${updateBannerHTML()}
   ${whatsNewHTML()}
   ${quickHTML()}
 
@@ -813,9 +838,167 @@ function quizHistoryHTML(){
     <div class="field"><strong>ASRM · мания</strong><span class="hint">0–20, от 6 — вероятна гипомания</span>${quizChartSVG("asrm")}</div></div></div>`;
 }
 
+/* ---------- закономерности в записях ---------- */
+function corr(p){const mx=avg(p.map(x=>x[0])),my=avg(p.map(x=>x[1]));let a=0,b=0,c=0;p.forEach(([x,y])=>{a+=(x-mx)*(y-my);b+=(x-mx)**2;c+=(y-my)**2});return b&&c?a/Math.sqrt(b*c):0}
+function findPatterns(E,meds){
+  const keys=Object.keys(E).sort();const MIN=14;
+  if(keys.length<MIN)return{enough:false,n:keys.length,min:MIN,items:[]};
+  const mood=k=>dayMood(E[k]);const items=[];
+  // Сон «прошлой ночью» записан в день k: смотрим настроение в тот же день и на следующий.
+  const grp=pred=>{const same=[],next=[];let n=0;keys.forEach(k=>{const e=E[k];if(!pred(e))return;n++;const a=mood(k),b=mood(addDays(k,1));if(a!=null)same.push(a);if(b!=null)next.push(b)});return{n,same:avg(same),next:avg(next)}};
+  const sl=e=>sleepH(e);
+  const norm=grp(e=>sl(e)!=null&&sl(e)>=6&&sl(e)<=10);
+  const sleepCmp=(g,label)=>{
+    if(g.n<3||norm.n<3||g.same==null||norm.same==null)return;
+    const d1=g.same-norm.same,d2=g.next!=null&&norm.next!=null?g.next-norm.next:0;
+    const txt=`${label} (${g.n} раз) настроение в тот же день в среднем ${f1(g.same)}${g.next!=null?`, на следующий — ${f1(g.next)}`:""}. После обычного сна, 6–10 ч, — ${f1(norm.same)}${norm.next!=null?` и ${f1(norm.next)}`:""}.`;
+    if(Math.abs(d1)<0.8&&Math.abs(d2)<0.8)items.push({dir:"same",t:`${label} (${g.n} раз) настроение почти не отличается от дней после обычного сна.`});
+    else items.push({dir:d1+d2>0?"up":"down",t:txt});
+  };
+  sleepCmp(grp(e=>sl(e)!=null&&sl(e)<6),"После ночей короче 6 ч");
+  sleepCmp(grp(e=>sl(e)!=null&&sl(e)>10),"После ночей длиннее 10 ч");
+  const pairs=keys.map(k=>[sl(E[k]),mood(addDays(k,1))]).filter(p=>p[0]!=null&&p[1]!=null);
+  if(pairs.length>=10){const r=corr(pairs);const st=Math.abs(r)>=0.6?"сильная":Math.abs(r)>=0.4?"заметная":"слабая";
+    if(Math.abs(r)>=0.3)items.push({dir:r<0?"up":"down",t:r<0?`Чем меньше вы спите, тем выше настроение на следующий день: связь ${st} (пар соседних дней: ${pairs.length}). При биполярном расстройстве так бывает перед подъёмом — об этом полезно знать врачу.`:`Чем больше вы спите, тем выше настроение на следующий день: связь ${st} (пар соседних дней: ${pairs.length}).`})}
+  const base=avg(keys.map(mood));
+  const missDays=keys.filter(k=>{const t=medsTaken(E[k],meds);return t&&t.taken<t.total});
+  if(missDays.length>=2&&base!=null){const ms=[];missDays.forEach(k=>{for(let i=1;i<=3;i++){const m=mood(addDays(k,i));if(m!=null)ms.push(m)}});const a=avg(ms);
+    if(a!=null)items.push(Math.abs(a-base)>=0.8?{dir:a>base?"up":"down",t:`После пропусков препаратов (${missDays.length} дн.) настроение в следующие 3 дня в среднем ${f1(a)} — ${a>base?"выше":"ниже"} обычного (${f1(base)}).`}:{dir:"same",t:`После пропусков препаратов (${missDays.length} дн.) заметной разницы в настроении в следующие дни не видно.`})}
+  const alc=grp(e=>e.alcohol==="some"||e.alcohol==="much"),noAlc=grp(e=>e.alcohol==="none");
+  if(alc.n>=3&&noAlc.n>=3&&alc.next!=null&&noAlc.next!=null&&Math.abs(alc.next-noAlc.next)>=0.8)
+    items.push({dir:alc.next>noAlc.next?"up":"down",t:`На следующий день после алкоголя или веществ (${alc.n} раз) настроение в среднем ${f1(alc.next)}, без них — ${f1(noAlc.next)}.`});
+  const act=grp(e=>typeof e.activity==="number"&&e.activity>=30),noAct=grp(e=>typeof e.activity==="number"&&e.activity<30);
+  if(act.n>=3&&noAct.n>=3&&act.same!=null&&noAct.same!=null&&Math.abs(act.same-noAct.same)>=0.8)
+    items.push({dir:act.same>noAct.same?"up":"down",t:`В дни с активностью от 30 минут (${act.n} раз) настроение в среднем ${f1(act.same)}, в остальные — ${f1(noAct.same)}.`});
+  return{enough:true,n:keys.length,items};
+}
+function patternsHTML(E,meds){
+  const p=findPatterns(E,meds);
+  const icon={up:"↑",down:"↓",same:"≈"};
+  return `<div class="panel field"><span class="label">Закономерности в ваших записях</span>
+    ${!p.enough?`<p class="hint">Появятся, когда наберётся хотя бы ${p.min} записей — сейчас ${p.n}. Программа сравнит, как меняется настроение после короткого и длинного сна, пропусков препаратов, алкоголя и физической активности.</p>`
+    :p.items.length?`<ul class="pat-list">${p.items.map(i=>`<li><span class="pat-ico ${i.dir}">${icon[i.dir]}</span><span>${esc(i.t)}</span></li>`).join("")}</ul>`
+    :`<p class="hint">По ${p.n} записям устойчивых закономерностей не видно. Это тоже хороший знак: сон и пропуски пока заметно не сдвигают настроение.</p>`}
+    <p class="hint">Это совпадения в ваших записях за всё время, а не доказанные причины. Чем больше записей, тем надёжнее вывод. Стрелка показывает, выше (↑) или ниже (↓) было настроение. Обсудите с врачом то, что кажется важным.</p>
+  </div>`;
+}
+
+/* ---------- годовой обзор ---------- */
+const MONTHS=["январь","февраль","март","апрель","май","июнь","июль","август","сентябрь","октябрь","ноябрь","декабрь"];
+function yearHTML(E,meds){
+  const tk=todayKey();const y=S.calYear||(S.calYear=+tk.slice(0,4));
+  const firstYear=Math.min(y,...Object.keys(E).map(k=>+k.slice(0,4)));
+  let rows="";
+  for(let m=0;m<12;m++){
+    const days=new Date(y,m+1,0).getDate();const ks=[];
+    let cells=`<span class="ym">${MONTHS[m]}</span>`;
+    for(let d=1;d<=31;d++){
+      if(d>days){cells+=`<span class="yc none"></span>`;continue}
+      const k=y+"-"+pad(m+1)+"-"+pad(d);const e=E[k];const fut=k>tk;const mo=dayMood(e);const ev=eventsOn(k).length;
+      if(!fut)ks.push(k);
+      cells+=fut?`<span class="yc fut"></span>`:`<button type="button" class="yc${e?" has":""}${k===tk?" today":""}" data-yearday="${k}" title="${esc(dayTitle(k,e,meds))}" style="${e?"background:"+moodFill(mo):""}">${ev?`<i class="yev"></i>`:""}</button>`;
+    }
+    const ms=ks.map(k=>dayMood(E[k])).filter(v=>v!=null);
+    cells+=`<span class="yavg num">${ms.length?f1(avg(ms)):""}</span>`;
+    rows+=cells;
+  }
+  const filled=Object.keys(E).filter(k=>k.startsWith(y+"-")).length;
+  return `${S.demo?`<div class="demo-banner"><span>Обзор показывает пример с вымышленными данными.</span><button class="btn small" type="button" id="demoOff">Выйти из примера</button></div>`:""}
+  <div class="daynav"><h2>${y} год</h2>
+    <button class="iconbtn" type="button" data-yearnav="-1" aria-label="Предыдущий год" ${y<=firstYear?"disabled":""}>←</button>
+    <button class="iconbtn" type="button" data-yearnav="1" aria-label="Следующий год" ${y>=+tk.slice(0,4)?"disabled":""}>→</button>
+    <div class="seg" role="group" aria-label="Вид календаря"><button type="button" data-calmode="month" aria-pressed="false">Месяц</button><button type="button" data-calmode="year" aria-pressed="true">Год</button></div></div>
+  <div class="panel field">
+    <p class="hint">Каждая клетка — день, цвет — вечернее настроение. Так видны долгие подъёмы и спады и их повторение по сезонам. Записей за год: ${filled}. Щелчок по дню открывает его в календаре.</p>
+    <div class="year-wrap"><div class="yeargrid">
+      <span></span>${Array.from({length:31},(_,i)=>`<span class="yh num">${(i+1)%5===0||i===0?i+1:""}</span>`).join("")}<span class="yh">среднее</span>
+      ${rows}
+    </div></div>
+    <div class="legend">
+      <span class="ygrad">${[1,2,3,4,5,6,7,8,9,10].map(v=>`<i style="background:${moodFill(v)}" title="${v}"></i>`).join("")}</span><span>1 — депрессия … 10 — мания</span>
+      <span><i style="background:var(--bg);border:1px solid var(--line);width:10px;height:10px"></i>нет записи</span>
+      <span><i class="yev-l"></i>изменение лечения или визит</span>
+    </div>
+  </div>`;
+}
+
+/* ---------- сводка для близкого ---------- */
+function relOpts(){return S.relOpts||(S.relOpts={n:14,meds:true,signals:true,harm:false,plan:false})}
+function relativePanelHTML(){
+  const o=relOpts();const cb=(k,l)=>`<label class="med"><input type="checkbox" data-relopt="${k}" ${o[k]?"checked":""}><span>${l}</span></label>`;
+  return `<div class="panel field" id="relPanel"><span class="label">Сводка для близкого человека</span>
+    <p class="hint">Короткий PDF: как менялись настроение и сон, и что может сделать близкий. Заметки, события дня, триггеры, побочные эффекты, опросники и названия препаратов в него не попадают.</p>
+    <div class="seg" role="group" aria-label="Период">${[14,30].map(x=>`<button type="button" data-reln="${x}" aria-pressed="${o.n===x}">${x} дней</button>`).join("")}</div>
+    <div class="meds">
+      ${cb("meds","Показывать, были ли пропуски препаратов (без названий)")}
+      ${cb("signals","Показывать сигналы, на которые стоит обратить внимание")}
+      ${cb("harm","Показывать отметки о мыслях о самоповреждении")}
+      ${cb("plan","Добавить контакты врача и близких из моего плана")}
+    </div>
+    <div class="row"><button class="btn primary" type="button" id="relPdf" ${Object.keys(S.entries).length?"":"disabled"}>Сохранить PDF для близкого</button></div>
+  </div>`;
+}
+function relativeSummary(E,meds,keys,o){
+  const L=keys.filter(k=>E[k]);const out=[];
+  if(!L.length)return["За этот период записей нет."];
+  out.push(`Записи есть за ${L.length} из ${keys.length} дней.`);
+  const prev=rangeKeys(keys.length,addDays(keys[0],-1)).filter(k=>E[k]);
+  const m=avg(L.map(k=>dayMood(E[k]))),mp=prev.length>=5?avg(prev.map(k=>dayMood(E[k]))):null;
+  if(m!=null){let s=`Настроение в среднем ${f1(m)} из 10 (1 — глубокая депрессия, 10 — выраженная мания)`;
+    if(mp!=null){const d=m-mp;s+=Math.abs(d)<0.7?", примерно как в предыдущий период.":d>0?`, выше, чем в предыдущий период (${f1(mp)}).`:`, ниже, чем в предыдущий период (${f1(mp)}).`}else s+=".";
+    out.push(s)}
+  const sl=L.map(k=>sleepH(E[k])).filter(v=>v!=null);
+  if(sl.length){const sh=sl.filter(v=>v<6).length;out.push(`Сон в среднем ${f1(avg(sl))} ч.`+(sh?` Ночей короче 6 часов: ${sh}.`:""))}
+  if(o.meds){const md=L.filter(k=>medsTaken(E[k],meds));const miss=md.filter(k=>{const t=medsTaken(E[k],meds);return t.taken<t.total});
+    if(md.length)out.push(miss.length?`Препараты: были пропуски в ${miss.length} из ${md.length} дней с отметкой.`:`Препараты: принимаю по схеме, пропусков не отмечено.`)}
+  if(o.harm){const h=L.filter(k=>E[k].selfharm==="yes");if(h.length)out.push(`Мысли о самоповреждении отмечены: ${h.map(fmtShort).join(", ")}.`)}
+  return out;
+}
+function buildRelativePdfHTML(){
+  const o=relOpts(),E=S.entries,meds=S.settings.meds,end=todayKey(),keys=rangeKeys(o.n,end);
+  const harmRe=/самоповрежд|смерти/i;
+  const al=o.signals?analyze(E,end,meds).filter(a=>o.harm||!harmRe.test(a.t)).filter(a=>!/^PHQ|^ASRM/.test(a.t)):[];
+  const pl=S.settings.plan,doc=S.settings.doctor;
+  return pdfHead("Как у меня дела — "+fmtFull(keys[0])+"–"+fmtFull(end))+`
+<h1>Как у меня дела</h1>
+<div class="sub">Сводка из моего дневника самонаблюдения за ${o.n} дней: ${fmtFull(keys[0])} — ${fmtFull(end)}. Подробности — у меня и у моего врача.</div>
+<div class="keep"><h2>Коротко</h2><ul>${relativeSummary(E,meds,keys,o).map(l=>`<li>${esc(l)}</li>`).join("")}</ul></div>
+<div class="keep"><h2>Настроение и сон по дням</h2>
+${chartSVG(keys,E,meds,{pm:true,noMeds:!o.meds,noHarm:!o.harm,events:[]})}
+<div class="legend"><span><i></i>Настроение вечером: выше полосы — подъём, ниже — спад</span><span><i style="background:var(--accent-soft);height:9px"></i>Середина шкалы 4–7</span><span><i style="background:var(--man);height:7px"></i>Сон &lt; 6 ч</span><span><i style="background:var(--accent);height:7px"></i>Сон 6–10 ч</span><span><i style="background:var(--dep);height:7px"></i>Сон &gt; 10 ч</span>${o.meds?`<span><i style="background:var(--ok);height:7px"></i>Препараты приняты</span><span><i style="background:var(--man);height:7px"></i>часть</span><span><i style="background:var(--warn);height:7px"></i>пропуск</span>`:""}</div></div>
+${o.signals?`<div class="keep"><h2>На что я прошу обратить внимание</h2><ul>${al.map(a=>`<li class="${a.sev==="urgent"?"urgent":""}">${esc(a.t)}</li>`).join("")||"<li>Сейчас особых сигналов нет.</li>"}</ul></div>`:""}
+<div class="keep"><h2>Как ты можешь помочь</h2><ul>
+<li>Если замечаешь перемены — говори о конкретных наблюдениях («ты третью ночь спишь по 4 часа»), а не о диагнозе.</li>
+<li>Выбирай для разговора спокойный момент и говори без упрёков.</li>
+<li>Предложи вместе связаться с моим врачом, а не решать за моей спиной.</li>
+<li>Не бери на себя роль единственного «контролёра» — подключай врача и других близких.</li>
+<li class="urgent">Если я говорю о смерти или самоповреждении — или подавленность у меня сочетается со взвинченностью и бессонницей, — не жди: звони врачу, в скорую психиатрическую помощь или 112 и будь рядом.</li>
+</ul></div>
+${o.plan?`<div class="keep"><h2>Контакты</h2><ul>${doc.name||doc.phone?`<li>Мой врач: ${esc(doc.name||"")} ${esc(doc.phone||"")}</li>`:""}${lines(pl.people).map(x=>`<li>${esc(x)}</li>`).join("")}${lines(pl.pros).map(x=>`<li>${esc(x)}</li>`).join("")}<li>Экстренная помощь: 112</li></ul></div>`:""}
+<p class="foot">Сводка составлена по моим собственным оценкам. Это не медицинское заключение.</p>
+</body></html>`;
+}
+
+/* ---------- автообновление (только программа для компьютера) ---------- */
+function updateHTML(){
+  if(IS_WEB||!window.diary||!window.diary.checkUpdates)return "";
+  const u=S.upd||{state:"idle"};
+  const msg={idle:"Программа сама проверяет обновления при запуске.",checking:"Проверяю обновления…",none:"Установлена последняя версия.",available:`Нашлась версия ${esc(u.version||"")}, загружаю…`,downloading:`Загружаю версию ${esc(u.version||"")}: ${u.percent||0}%`,ready:`Версия ${esc(u.version||"")} загружена.`,error:"Не получилось проверить обновления: "+esc(u.message||"нет связи"),portable:"Версия без установки обновляется вручную: скачайте новый файл."}[u.state]||"";
+  return `<div class="panel field" id="updPanel"><span class="label">Обновления · версия ${APP_VERSION}</span>
+    <p>${msg}</p>
+    <div class="row">${u.state==="ready"?`<button class="btn primary" type="button" id="updInstall">Перезапустить и установить</button>`:`<button class="btn small" type="button" id="updCheck" ${u.state==="checking"||u.state==="downloading"?"disabled":""}>Проверить сейчас</button>`}</div>
+    <p class="hint">Записи при обновлении не затрагиваются.</p>
+  </div>`;
+}
+function updateBannerHTML(){
+  const u=S.upd;if(!u||u.state!=="ready"||S.updDismissed)return "";
+  return `<div class="panel field whatsnew"><div class="block-head"><span class="label">Готово обновление до версии ${esc(u.version)}</span><span class="row"><button class="btn primary small" type="button" id="updInstall">Перезапустить и установить</button><button class="btn ghost small" type="button" id="updLater">Позже</button></span></div></div>`;
+}
+
 /* ---------- версия и «Что нового» ---------- */
-const APP_VERSION=(window.diary&&window.diary.version)||"1.1.0";
+const APP_VERSION=(window.diary&&window.diary.version)||"1.2.0";
 const CHANGELOG=[
+  ["1.2.0",["«Закономерности в ваших записях» на «Динамике»: как меняется настроение после короткого и длинного сна, пропусков препаратов, алкоголя, физической активности.","Годовой обзор: весь год на одном экране, кнопка «Год» в календаре.","Сводка для близкого человека: короткий PDF без заметок и названий препаратов, с подсказками, как помочь.","Автообновление программы для компьютера.","Список препаратов больше не задан заранее: он берётся из ваших записей и настроек."]],
   ["1.1.0",["Быстрая запись за полминуты: настроение, сон, препараты. Подробная анкета сворачивается.","«Коротко о последних 7 днях» — итог недели словами на «Динамике» и в PDF.","Отметки об изменениях лечения и визитах к врачу: на графике, в календаре и в PDF.","Опросники PHQ-9 (депрессия) и ASRM (мания) на вкладке «Неделя», с графиком баллов.","Номер версии и этот список изменений."]],
   ["1.0.0",["Ежедневная запись, календарь, графики, недельный обзор, план безопасности.","PDF для врача, вечерние напоминания, перенос записей между компьютером и iPhone."]]
 ];
@@ -839,6 +1022,7 @@ function monthStart(k){return k.slice(0,8)+"01"}
 function addMonths(k,n){const d=parseKey(k);d.setDate(1);d.setMonth(d.getMonth()+n);return keyOf(d)}
 function renderCalendar(){
   const el=$("view-calendar");const E=entriesView();const meds=S.settings.meds;const tk=todayKey();
+  if(S.calMode==="year"){el.innerHTML=yearHTML(E,meds);return}
   const m0=S.calMonth||(S.calMonth=monthStart(S.date));
   const first=parseKey(m0),days=new Date(first.getFullYear(),first.getMonth()+1,0).getDate(),lead=(first.getDay()+6)%7;
   const isCur=m0===monthStart(tk);
@@ -862,7 +1046,8 @@ function renderCalendar(){
   <div class="daynav"><h2>${esc(monthName)}</h2>
     <button class="iconbtn" type="button" data-calnav="-1" aria-label="Предыдущий месяц">←</button>
     <button class="btn small" type="button" data-calnav="0" ${isCur?"disabled":""}>Текущий месяц</button>
-    <button class="iconbtn" type="button" data-calnav="1" aria-label="Следующий месяц" ${isCur?"disabled":""}>→</button></div>
+    <button class="iconbtn" type="button" data-calnav="1" aria-label="Следующий месяц" ${isCur?"disabled":""}>→</button>
+    <div class="seg" role="group" aria-label="Вид календаря"><button type="button" data-calmode="month" aria-pressed="true">Месяц</button><button type="button" data-calmode="year" aria-pressed="false">Год</button></div></div>
   <div class="cal-layout">
     <div class="panel">
       <div class="calgrid">${["пн","вт","ср","чт","пт","сб","вс"].map(w=>`<span class="cwd">${w}</span>`).join("")}${cells}</div>
@@ -914,7 +1099,7 @@ function chartSVG(keys,E,meds,o){
   const mTop=34,mH=176;                        // настроение
   const sHead=mTop+mH+44,sTop=sHead+22,sH=84;  // сон
   const pHead=sTop+sH+40,pY=pHead+20;          // препараты
-  const H=pY+40;
+  const H=o.noMeds?sTop+sH+40:pY+40;
   const n=keys.length,step=(W-L-R)/Math.max(n,1);
   const x=i=>L+step*(i+0.5), ym=v=>mTop+(10-v)/9*mH, ys=h=>sTop+sH-Math.min(h,12)/12*sH;
   const T=(xx,yy,txt,opt)=>`<text x="${xx}" y="${yy}" font-size="${(opt&&opt.size)||11}" ${opt&&opt.anchor?`text-anchor="${opt.anchor}"`:""} ${opt&&opt.weight?`font-weight="${opt.weight}"`:""} fill="${(opt&&opt.fill)||"var(--muted)"}">${txt}</text>`;
@@ -929,7 +1114,7 @@ function chartSVG(keys,E,meds,o){
   g+=T(L-26,ym(1)+4,"депрессия",{anchor:"end",size:10.5,fill:"var(--dep)"});
   // изменения лечения и визиты — вертикальные линии через все блоки
   (o.events||eventsList()).filter(ev=>keys.includes(ev.date)).forEach(ev=>{const xx=x(keys.indexOf(ev.date));
-    g+=`<line x1="${xx}" x2="${xx}" y1="${mTop-6}" y2="${pY+12}" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="4 3"/><circle cx="${xx}" cy="${mTop-17}" r="8" fill="var(--accent)"><title>${fmtShort(ev.date)} — ${esc(EVENT_TYPES[ev.type]||"событие")}${ev.text?": "+esc(ev.text):""}</title></circle><text x="${xx}" y="${mTop-13.5}" text-anchor="middle" font-size="10" font-weight="700" fill="var(--surface)">${EVENT_LETTER[ev.type]||"•"}</text>`});
+    g+=`<line x1="${xx}" x2="${xx}" y1="${mTop-6}" y2="${o.noMeds?sTop+sH:pY+12}" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="4 3"/><circle cx="${xx}" cy="${mTop-17}" r="8" fill="var(--accent)"><title>${fmtShort(ev.date)} — ${esc(EVENT_TYPES[ev.type]||"событие")}${ev.text?": "+esc(ev.text):""}</title></circle><text x="${xx}" y="${mTop-13.5}" text-anchor="middle" font-size="10" font-weight="700" fill="var(--surface)">${EVENT_LETTER[ev.type]||"•"}</text>`});
   const line=(fn,attrs)=>{let d="",pen=false;keys.forEach((k,i)=>{const v=fn(E[k]);if(v==null){pen=false;return}d+=(pen?"L":"M")+x(i).toFixed(1)+" "+ym(v).toFixed(1)+" ";pen=true});return d?`<path d="${d}" fill="none" ${attrs}/>`:""};
   if(o.energy)g+=line(e=>e&&typeof e.energy==="number"?e.energy:null,`stroke="var(--caution)" stroke-width="2" stroke-dasharray="5 4"`);
   if(o.am)g+=line(e=>e&&typeof e.moodAM==="number"?e.moodAM:null,`stroke="var(--ink-2)" stroke-width="1.2" stroke-dasharray="1.5 3"`);
@@ -938,7 +1123,7 @@ function chartSVG(keys,E,meds,o){
     if(o.energy&&typeof e.energy==="number")g+=`<rect x="${x(i)-3}" y="${ym(e.energy)-3}" width="6" height="6" fill="var(--caution)"/>`;
     if(o.am&&typeof e.moodAM==="number")g+=`<circle cx="${x(i)}" cy="${ym(e.moodAM)}" r="3.5" fill="var(--surface)" stroke="var(--ink-2)" stroke-width="1.5"/>`;
     if(o.pm&&typeof e.moodPM==="number")g+=`<circle cx="${x(i)}" cy="${ym(e.moodPM)}" r="5" fill="${moodColor(e.moodPM)}" stroke="var(--ink)" stroke-width="1.5"/>`;
-    if(e.selfharm==="yes")g+=`<circle cx="${x(i)}" cy="${mTop-10}" r="4.5" fill="var(--warn)"/>`;
+    if(!o.noHarm&&e.selfharm==="yes")g+=`<circle cx="${x(i)}" cy="${mTop-10}" r="4.5" fill="var(--warn)"/>`;
   });
   // --- сон
   g+=head(sHead,"Сон, часов");
@@ -948,10 +1133,12 @@ function chartSVG(keys,E,meds,o){
     g+=`<rect x="${(x(i)-bw/2).toFixed(1)}" y="${ys(sl).toFixed(1)}" width="${bw.toFixed(1)}" height="${(sTop+sH-ys(sl)).toFixed(1)}" rx="2" fill="${c}"/>`;
     if(step>=17)g+=T(x(i),ys(sl)-4,f1(sl).replace(/,0$/,""),{anchor:"middle",size:9.5,fill:"var(--ink-2)"});});
   // --- препараты
+  if(!o.noMeds){
   g+=head(pHead,"Приём препаратов");
   keys.forEach((k,i)=>{const t=medsTaken(E[k],meds);const c=!t?"var(--sunk)":t.taken===t.total?"var(--ok)":t.taken?"var(--man)":"var(--warn)";
     g+=`<rect x="${(x(i)-bw/2).toFixed(1)}" y="${pY}" width="${bw.toFixed(1)}" height="10" rx="2" fill="${c}"/>`;
     if(t&&t.taken<t.total&&step>=17)g+=T(x(i),pY-3,t.taken+"/"+t.total,{anchor:"middle",size:9,fill:"var(--ink-2)"});});
+  }
   // --- даты
   const every=Math.max(1,Math.ceil(n/12));
   keys.forEach((k,i)=>{if((n-1-i)%every===0)g+=T(x(i),H-8,fmtShort(k),{anchor:"middle",size:10.5})});
@@ -1007,6 +1194,7 @@ function renderTrends(){
   ${mainChartPanelHTML(E,meds)}
   ${eventsPanelHTML()}
   ${quizHistoryHTML()}
+  ${patternsHTML(E,meds)}
   <div class="grid2">
     ${levelsPanelHTML(keys,E)}
     ${triggersPanelHTML(keys,E,st,trig)}
@@ -1222,21 +1410,11 @@ function pdfEventsQuizHTML(keys){
   return `<div class="cols keep"><div><h2>Изменения лечения и визиты</h2><ul>${evs.map(x=>`<li><span class="num">${fmtShort(x.date)}</span> — ${esc(EVENT_TYPES[x.type]||"событие")}${x.text?": "+esc(x.text):""}</li>`).join("")||"<li>Не отмечались</li>"}</ul></div>
   <div><h2>Опросники</h2><ul>${qs.map(q=>`<li><span class="num">${fmtShort(q.date)}</span> — ${QUIZ[q.type].name}: <strong>${q.score} из ${QUIZ[q.type].max}</strong>, ${QUIZ[q.type].level(q.score)[0]}${q.type==="phq9"&&q.answers[8]>0?" <span class=\"urgent\">(вопрос 9: мысли о смерти или самоповреждении)</span>":""}</li>`).join("")||"<li>Не заполнялись</li>"}</ul></div></div>`;
 }
-function buildPdfHTML(n){
-  const E=S.entries,meds=S.settings.meds,end=todayKey(),keys=rangeKeys(n,end),st=statsFor(keys,E,meds);
-  const al=analyze(E,end,meds);
-  const trig=Object.entries(st.trig).sort((a,b)=>b[1]-a[1]);
-  const sh=keys.filter(k=>E[k]&&E[k].selfharm==="yes");
-  const se=keys.filter(k=>E[k]&&E[k].sideEffects&&E[k].sideEffects.trim());
-  const ev=keys.filter(k=>E[k]&&E[k].events&&E[k].events.trim());
-  const medAdh=meds.map(m=>{let t=0,tot=0;keys.forEach(k=>{const e=E[k];if(e&&e.meds&&m in e.meds){tot++;if(e.meds[m])t++}});return[m,t,tot]});
+// Общая шапка и стили для всех PDF (всегда светлая палитра, независимо от темы окна).
+function pdfHead(title){
   const tok=["--bg","--surface","--sunk","--ink","--ink-2","--muted","--line","--accent","--accent-soft","--dep","--mid","--man","--warn","--warn-soft","--caution","--caution-soft","--ok"];
-  // Для печати всегда светлая палитра, независимо от темы окна.
   const light={"--bg":"#FFFFFF","--surface":"#FFFFFF","--sunk":"#E8ECEF","--ink":"#1C232D","--ink-2":"#465061","--muted":"#6A7383","--line":"#D9DEE4","--accent":"#2D5E63","--accent-soft":"#DDEBEA","--dep":"#4A6BA8","--mid":"#9AA7A8","--man":"#C58517","--warn":"#AE3737","--warn-soft":"#F7E6E5","--caution":"#9A6A12","--caution-soft":"#F6EDDA","--ok":"#357A4C"};
-  const rows=keys.filter(k=>E[k]).map(k=>{const e=E[k];const t=medsTaken(e,meds);const sl=sleepH(e);
-    const note=[(e.triggers||[]).join(", "),(e.signs||[]).length?"предвестники: "+e.signs.join(", "):"",e.selfharm==="yes"?"мысли о самоповреждении":""].filter(Boolean).join("; ");
-    return `<tr><td>${fmtShort(k)}</td><td>${e.moodAM??"–"} / ${e.moodPM??"–"}</td><td>${sl==null?"–":f1(sl)}</td><td>${e.sleepQ??"–"}</td><td>${e.energy??"–"}</td><td>${e.irrit??"–"}</td><td>${e.anxiety??"–"}</td><td>${["нет","немного","заметно","сильно"][e.impuls]||"–"}</td><td>${t?t.taken+"/"+t.total:"–"}</td><td class="note">${esc(note)}</td></tr>`}).join("");
-  return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>Дневник самонаблюдения — ${fmtFull(keys[0])}–${fmtFull(end)}</title>
+  return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>${esc(title)}</title>
 ${["onest/400","onest/500","onest/600","literata/500","literata/600"].map(f=>`<link rel="stylesheet" href="%FONTBASE%/${f}.css">`).join("")}
 <style>
 :root{${tok.map(t=>t+":"+light[t]).join(";")}}
@@ -1267,7 +1445,20 @@ thead{display:table-header-group}h2{break-after:avoid}
 .foot{margin-top:14px;font-size:8pt;color:var(--muted)}
 .keep{break-inside:avoid}
 </style></head><body>
-<h1>Дневник самонаблюдения</h1>
+`;
+}
+function buildPdfHTML(n){
+  const E=S.entries,meds=S.settings.meds,end=todayKey(),keys=rangeKeys(n,end),st=statsFor(keys,E,meds);
+  const al=analyze(E,end,meds);
+  const trig=Object.entries(st.trig).sort((a,b)=>b[1]-a[1]);
+  const sh=keys.filter(k=>E[k]&&E[k].selfharm==="yes");
+  const se=keys.filter(k=>E[k]&&E[k].sideEffects&&E[k].sideEffects.trim());
+  const ev=keys.filter(k=>E[k]&&E[k].events&&E[k].events.trim());
+  const medAdh=meds.map(m=>{let t=0,tot=0;keys.forEach(k=>{const e=E[k];if(e&&e.meds&&m in e.meds){tot++;if(e.meds[m])t++}});return[m,t,tot]});
+  const rows=keys.filter(k=>E[k]).map(k=>{const e=E[k];const t=medsTaken(e,meds);const sl=sleepH(e);
+    const note=[(e.triggers||[]).join(", "),(e.signs||[]).length?"предвестники: "+e.signs.join(", "):"",e.selfharm==="yes"?"мысли о самоповреждении":""].filter(Boolean).join("; ");
+    return `<tr><td>${fmtShort(k)}</td><td>${e.moodAM??"–"} / ${e.moodPM??"–"}</td><td>${sl==null?"–":f1(sl)}</td><td>${e.sleepQ??"–"}</td><td>${e.energy??"–"}</td><td>${e.irrit??"–"}</td><td>${e.anxiety??"–"}</td><td>${["нет","немного","заметно","сильно"][e.impuls]||"–"}</td><td>${t?t.taken+"/"+t.total:"–"}</td><td class="note">${esc(note)}</td></tr>`}).join("");
+  return pdfHead(`Дневник самонаблюдения — ${fmtFull(keys[0])}–${fmtFull(end)}`)+`<h1>Дневник самонаблюдения</h1>
 <div class="sub">Период: ${fmtFull(keys[0])} — ${fmtFull(end)} · ${n} дней, записей: ${st.filled} · сформировано ${new Date().toLocaleDateString("ru-RU")}</div>
 <div class="stats">
   <div class="stat"><div class="l">Настроение</div><div class="v">${f1(st.moodAvg)}</div><div class="s">от ${f1(st.moodMin)} до ${f1(st.moodMax)}</div></div>
@@ -1372,7 +1563,9 @@ function renderData(){
     <div class="row"><button class="btn primary" type="button" data-pdf="${n}">Графики для врача (.pdf)</button><button class="btn" type="button" id="dlReport">Скачать сводку (.txt)</button><button class="btn" type="button" id="dlCSV">Скачать все записи (.csv)</button><button class="btn ghost" type="button" id="copyReport">Скопировать текст</button></div>
     <p class="hint">CSV открывается в Excel и Google Таблицах.</p>`:`<p class="hint">Сводка появится после первых записей.</p>`}
   </div>
+  ${relativePanelHTML()}
   ${reminderHTML()}
+  ${updateHTML()}
   ${appearanceHTML()}
   <div class="panel field">
     <label class="label" for="medsList">Мои препараты</label>
@@ -1512,6 +1705,14 @@ document.addEventListener("click",async ev=>{
   if(b.dataset.daynav){goDate(addDays(S.date,+b.dataset.daynav));return}
   if(b.dataset.goday){goDate(b.dataset.goday);return}
   if(b.dataset.calday){S.calSel=b.dataset.calday;renderCalendar();return}
+  if(b.dataset.calmode){S.calMode=b.dataset.calmode;if(S.calMode==="year")S.calYear=+(S.calMonth||todayKey()).slice(0,4);renderCalendar();return}
+  if(b.dataset.yearnav){S.calYear+=+b.dataset.yearnav;renderCalendar();return}
+  if(b.dataset.yearday){const k=b.dataset.yearday;S.calMode="month";S.calSel=k;S.calMonth=monthStart(k);renderCalendar();return}
+  if(b.dataset.reln){relOpts().n=+b.dataset.reln;const p=$("relPanel");if(p)p.outerHTML=relativePanelHTML();return}
+  if(b.id==="relPdf"){b.disabled=true;try{if(IS_WEB)toast("В окне печати нажмите «Поделиться» → «Сохранить в Файлы», чтобы получить PDF");const r=await window.diary.savePDF("kak-u-menya-dela-"+todayKey()+".pdf",buildRelativePdfHTML());if(r&&r.status==="saved")toast("PDF сохранён")}catch(e){toast("Не получилось сохранить PDF: "+((e&&e.message)||"ошибка"))}finally{b.disabled=false}return}
+  if(b.id==="updCheck"){S.upd={state:"checking"};renderUpd();window.diary.checkUpdates();return}
+  if(b.id==="updInstall"){window.diary.installUpdate();return}
+  if(b.id==="updLater"){S.updDismissed=true;document.querySelectorAll(".whatsnew").forEach(w=>{if(w.querySelector("#updLater"))w.remove()});return}
   if(b.dataset.calnav!=null){const n=+b.dataset.calnav;S.calMonth=n===0?monthStart(todayKey()):addMonths(S.calMonth,n);renderCalendar();return}
   if(b.dataset.openday){if(goDate(b.dataset.openday))setTab("today");return}
   if(b.id==="saveDay"){
@@ -1562,6 +1763,7 @@ document.addEventListener("keydown",ev=>{
 document.addEventListener("toggle",ev=>{if(ev.target.id==="howto")S.howtoOpen=ev.target.open;if(ev.target.id==="fullForm"){S.fullOpen=ev.target.open;try{localStorage.setItem("bar-diary-full",S.fullOpen?"1":"0")}catch(e){}}},true);
 document.addEventListener("change",ev=>{
   const t=ev.target;
+  if(t.dataset.relopt){relOpts()[t.dataset.relopt]=t.checked;return}
   if(t.id==="datePick"&&t.value){goDate(t.value);return}
   if(t.id==="rmEnabled"){setPrefs({enabled:t.checked},p=>p.enabled?"Напоминание включено на "+p.time:"Напоминание выключено");return}
   if(t.id==="rmTime"&&t.value){setPrefs({time:t.value},p=>"Напомню в "+p.time);return}
@@ -1575,6 +1777,8 @@ let startTab="today";try{const t=localStorage.getItem("bar-diary-tab");if(t&&$("
 try{applyTheme(localStorage.getItem("bar-diary-theme")||"system")}catch(e){applyTheme("system")}
 renderAll();setTab(startTab);
 $("appVer").textContent=APP_VERSION;
+function renderUpd(){const p=$("updPanel");if(p)p.outerHTML=updateHTML();if(S.upd&&S.upd.state==="ready"&&S.tab==="today"&&!S.dirty)renderToday()}
+if(window.diary&&window.diary.onUpdate)window.diary.onUpdate(u=>{S.upd=u;renderUpd()});
 initStore();
 if(window.diary&&window.diary.getPrefs)loadPrefs();
 })();

@@ -106,7 +106,7 @@
 
   window.diary = {
     isWeb: true,
-    version: "1.1.0",
+    version: "1.2.0",
     getAll, put, replaceAll, saveFile, openJSON, savePDF,
     copy: (text) => navigator.clipboard.writeText(String(text)),
     openDataFolder: () => Promise.resolve(),
